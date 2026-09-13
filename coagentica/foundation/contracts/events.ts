@@ -1,0 +1,2 @@
+export type { SourceEventRecord, DomainEvent, EventEnvelope } from "@/coagentica/operations-core/contracts/domain-event";
+export { domainEventFromRecord, toEventEnvelope, extractCorrelationId, extractCausationId, eventRecordToEnvelope, createDomainEvent, createEventEnvelope } from "@/coagentica/operations-core/contracts/domain-event";
