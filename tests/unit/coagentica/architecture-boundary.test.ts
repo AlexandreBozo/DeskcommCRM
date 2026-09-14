@@ -147,6 +147,42 @@ describe("coagentica — barreiras arquiteturais", () => {
     );
   });
 
+  describe("intelligence/ fora de adapters não importa tenant-runtime, integrations, Supabase ou AI SDK", () => {
+    const files = collectTsFiles(INTELLIGENCE).filter(
+      (f) => !f.includes("/adapters/")
+    );
+
+    it.each(files)(
+      "%s permanece independente de runtime/infraestrutura",
+      (filePath) => {
+        const content = readFileContent(filePath);
+        const imports = content.match(
+          /import\s+.*from\s+["'][^"']*(?:tenant-runtime|coagentica\/integrations|@supabase\/|@?ai-sdk|anthropic|openai|google-generative)[^"']*["']/gi
+        ) ?? [];
+        expect(
+          imports,
+          `${relativePath(filePath)} contém import proibido de runtime/infraestrutura: ${imports.join(", ")}`
+        ).toHaveLength(0);
+      }
+    );
+  });
+
+  describe("intelligence/ports/tenant-operational-context-port.ts é puro", () => {
+    const portFile = join(
+      INTELLIGENCE,
+      "ports",
+      "tenant-operational-context-port.ts"
+    );
+
+    it("não importa tenant-runtime, operations-kernel, integrations, Supabase, Hermes ou AI SDK", () => {
+      const content = readFileContent(portFile);
+      const forbidden = content.match(
+        /import\s+.*from\s+["'][^"']*(?:tenant-runtime|operations-kernel|coagentica\/integrations|deskcomm|@supabase\/|hermes|@?ai-sdk|anthropic|openai|google-generative)[^"']*["']/gi
+      ) ?? [];
+      expect(forbidden).toHaveLength(0);
+    });
+  });
+
   describe("Hermes só aparece em intelligence/adapters/", () => {
     const files = collectTsFiles(INTELLIGENCE).filter(
       (f) => !f.includes("/adapters/")
