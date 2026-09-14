@@ -183,6 +183,34 @@ describe("coagentica — barreiras arquiteturais", () => {
     });
   });
 
+  describe("intelligence/ports/* e runtime.ts são puros (v0.5)", () => {
+    const portsDir = join(INTELLIGENCE, "ports");
+    const files = [...collectTsFiles(portsDir), join(INTELLIGENCE, "runtime.ts")];
+
+    it.each(files)(
+      "%s não importa adapters nem infraestrutura de runtime",
+      (filePath) => {
+        const content = readFileContent(filePath);
+        const forbidden = content.match(
+          /import\s+.*from\s+["'][^"']*(?:adapters|tenant-runtime|operations-kernel|coagentica\/integrations|deskcomm|@\/lib\/|@supabase\/|hermes|@?ai-sdk|anthropic|openai|google-generative)[^"']*["']/gi
+        ) ?? [];
+        expect(
+          forbidden,
+          `${relativePath(filePath)} contém import proibido de adapters/runtime: ${forbidden.join(", ")}`
+        ).toHaveLength(0);
+      }
+    );
+
+    it.each(files)("%s não referencia Hermes", (filePath) => {
+      const content = readFileContent(filePath);
+      const hermesRefs = content.match(/[Hh]ermes/g) ?? [];
+      expect(
+        hermesRefs,
+        `${relativePath(filePath)} contém referência a Hermes fora de adapters`
+      ).toHaveLength(0);
+    });
+  });
+
   describe("Hermes só aparece em intelligence/adapters/", () => {
     const files = collectTsFiles(INTELLIGENCE).filter(
       (f) => !f.includes("/adapters/")
@@ -199,6 +227,41 @@ describe("coagentica — barreiras arquiteturais", () => {
         ).toHaveLength(0);
       }
     );
+  });
+
+  describe("intelligence/runtime v0.5 + ports são puros (só portas)", () => {
+    const RUNTIME = join(INTELLIGENCE, "runtime.ts");
+    const PORTS = join(INTELLIGENCE, "ports");
+    const pureFiles = [
+      RUNTIME,
+      join(PORTS, "policy-gate-port.ts"),
+      join(PORTS, "decision-store-port.ts"),
+      join(PORTS, "capability-executor-port.ts"),
+      join(PORTS, "tenant-operational-context-port.ts"),
+    ];
+
+    it.each(pureFiles)(
+      "%s não importa adapters ou infraestrutura de runtime",
+      (filePath) => {
+        const content = readFileContent(filePath);
+        const forbidden = content.match(
+          /import\s+.*from\s+["'][^"']*(?:adapters|tenant-runtime|operations-kernel|coagentica\/integrations|deskcomm|@supabase\/|@\/lib\/|hermes|@?ai-sdk|anthropic|openai|google-generative)[^"']*["']/gi
+        ) ?? [];
+        expect(
+          forbidden,
+          `${relativePath(filePath)} contém import proibido de adapters/runtime: ${forbidden.join(", ")}`
+        ).toHaveLength(0);
+      }
+    );
+
+    it.each(pureFiles)("%s não referencia Hermes", (filePath) => {
+      const content = readFileContent(filePath);
+      const hermesRefs = content.match(/[Hh]ermes/g) ?? [];
+      expect(
+        hermesRefs,
+        `${relativePath(filePath)} contém referência a Hermes fora de adapters`
+      ).toHaveLength(0);
+    });
   });
 
   describe("operations-kernel/ não conhece tenant-runtime/", () => {
@@ -306,6 +369,24 @@ describe("coagentica — barreiras arquiteturais", () => {
       const content = readFileContent(adapterFile);
       const imports = content.match(/import\s+.*from\s+["']@\/lib\/database\.types["']/g) ?? [];
       expect(imports.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("intelligence canonical não carrega adapters", () => {
+    const barrelFile = join(INTELLIGENCE, "index.ts");
+    const runtimeFile = join(INTELLIGENCE, "runtime.ts");
+
+    it("barrel canônico não re-exporta adapters", () => {
+      const content = readFileContent(barrelFile);
+      expect(content).not.toMatch(/export\s+\*\s+from\s+["']\.\/adapters["']/);
+    });
+
+    it("runtime não importa adapters, Hermes ou infraestrutura", () => {
+      const content = readFileContent(runtimeFile);
+      const forbidden = content.match(
+        /import\s+.*from\s+["'][^"']*(?:\/adapters|hermes|tenant-runtime|operations-kernel|coagentica\/integrations|@supabase\/|@\/lib\/|ai-sdk|anthropic|openai|google-generative)[^"']*["']/gi
+      ) ?? [];
+      expect(forbidden).toHaveLength(0);
     });
   });
 
