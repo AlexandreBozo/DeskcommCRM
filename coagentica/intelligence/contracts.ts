@@ -1,5 +1,17 @@
 import type { TenantContext, ActorContext } from "@/coagentica/foundation/contracts/tenancy";
-import type { PolicyDecision } from "@/coagentica/operations-kernel/contracts/policy";
+
+/**
+ * Visão mínima de uma decisão de política consumida pela inteligência.
+ * É estrutural de propósito: PolicyDecision do Operations Kernel é compatível,
+ * mas o Intelligence Runtime não depende do Kernel para existir.
+ */
+export interface PolicyConstraint {
+  readonly decision: "allow" | "deny" | "defer";
+  readonly reason: string;
+  readonly retryAt?: string;
+  readonly requiredRole?: string;
+  readonly metadata?: unknown;
+}
 
 export interface IntelligenceRequest<T = Record<string, unknown>> {
   readonly requestId: string;
@@ -7,7 +19,7 @@ export interface IntelligenceRequest<T = Record<string, unknown>> {
   readonly actorContext: ActorContext;
   readonly capability: string;
   readonly input: T;
-  readonly policyDecision?: PolicyDecision;
+  readonly policyDecision?: PolicyConstraint;
   readonly metadata: Record<string, unknown>;
   readonly timestamp: string;
 }
@@ -45,7 +57,7 @@ export interface DecisionRecord {
   readonly reason: string;
   readonly inputHash: string;
   readonly outputHash?: string;
-  readonly policyDecision?: PolicyDecision;
+  readonly policyDecision?: PolicyConstraint;
   readonly timestamp: string;
   readonly metadata: Record<string, unknown>;
 }
@@ -56,7 +68,7 @@ export function createIntelligenceRequest<T = Record<string, unknown>>(params: {
   actorContext: ActorContext;
   capability: string;
   input: T;
-  policyDecision?: PolicyDecision;
+  policyDecision?: PolicyConstraint;
   metadata?: Record<string, unknown>;
 }): IntelligenceRequest<T> {
   if (!params.requestId || params.requestId.trim() === "") {
@@ -130,7 +142,7 @@ export function createDecisionRecord(params: {
   reason: string;
   inputHash: string;
   outputHash?: string;
-  policyDecision?: PolicyDecision;
+  policyDecision?: PolicyConstraint;
   metadata?: Record<string, unknown>;
 }): DecisionRecord {
   if (!params.decisionId || params.decisionId.trim() === "") {

@@ -96,6 +96,17 @@ describe("coagentica/foundation/contracts/tenancy", () => {
       expect(errors).toHaveLength(0);
     });
 
+    it("aceita visibilityMode all e rejeita modos fora do contrato", () => {
+      const allContext = createTenantContext({ ...baseTenantParams, visibilityMode: "all" });
+      expect(validateTenantContext(allContext)).toHaveLength(0);
+
+      const invalidContext: TenantContext = {
+        ...allContext,
+        visibilityMode: "team" as unknown as VisibilityMode,
+      };
+      expect(validateTenantContext(invalidContext)).toContain("visibilityMode inválido");
+    });
+
     it("retorna erros para campos obrigatórios ausentes", () => {
       const ctx: TenantContext = {
         tenantId: "",

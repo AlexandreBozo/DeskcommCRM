@@ -1,11 +1,12 @@
 import type { TenantContext } from "@/coagentica/foundation/contracts/tenancy";
+import { createTenantOperationsCore } from "../contracts/operations-core";
 import type { TenantOperationsCore } from "../contracts/operations-core";
 
 export function adaptTenantContextToOperationsCore(
   tenantContext: TenantContext,
   actorId: string
 ): TenantOperationsCore {
-  return {
+  return createTenantOperationsCore({
     tenantId: tenantContext.tenantId,
     organizationId: tenantContext.organizationId,
     actorContext: {
@@ -16,10 +17,5 @@ export function adaptTenantContextToOperationsCore(
       isPlatformAdmin: tenantContext.isPlatformAdmin,
       correlationId: tenantContext.correlationId,
     },
-    permissions: [],
-    activeWorkflows: [],
-    publishedDefinitions: [],
-    eventLog: [],
-    policyDecisions: [],
-  };
+  });
 }

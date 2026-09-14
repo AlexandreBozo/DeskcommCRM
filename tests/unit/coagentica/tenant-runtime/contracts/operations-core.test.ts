@@ -98,6 +98,7 @@ describe("coagentica/tenant-runtime/contracts/operations-core", () => {
         publishedDefinitions: [],
         eventLog: [],
         policyDecisions: [],
+        state: { tenantId: "", entities: [], relationships: [], knowledgeSources: [], memoryEntries: [], goals: [], capabilities: [], version: 1, snapshotAt: "" },
       };
       const errors = validateTenantOperationsCore(core);
       expect(errors).toContain("tenantId é obrigatório");

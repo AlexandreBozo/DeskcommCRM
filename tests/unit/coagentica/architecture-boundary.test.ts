@@ -8,6 +8,8 @@ const CORE_CONTRACTS = join(ROOT, "coagentica/operations-kernel/contracts");
 const TENANT_RUNTIME = join(ROOT, "coagentica/tenant-runtime");
 const INTELLIGENCE = join(ROOT, "coagentica/intelligence");
 const OPS_ADAPTERS = join(ROOT, "coagentica/operations-kernel/adapters");
+const INTEGRATIONS_DESKCOMM = join(ROOT, "coagentica/integrations/deskcomm");
+const TENANT_PORTS = join(ROOT, "coagentica/tenant-runtime/ports");
 
 function collectTsFiles(dir: string): string[] {
   const files: string[] = [];
@@ -105,6 +107,24 @@ describe("coagentica — barreiras arquiteturais", () => {
     );
   });
 
+  describe("intelligence/ não depende de operations-kernel/", () => {
+    const files = collectTsFiles(INTELLIGENCE).filter(
+      (f) => !f.includes("/adapters/")
+    );
+
+    it.each(files)(
+      "%s não importa operations-kernel",
+      (filePath) => {
+        const content = readFileContent(filePath);
+        const imports = content.match(/import\s+.*from\s+["'][^"']*operations-kernel[^"']*["']/g) ?? [];
+        expect(
+          imports,
+          `${relativePath(filePath)} contém import proibido de operations-kernel`
+        ).toHaveLength(0);
+      }
+    );
+  });
+
   describe("Hermes só aparece em intelligence/adapters/", () => {
     const files = collectTsFiles(INTELLIGENCE).filter(
       (f) => !f.includes("/adapters/")
@@ -172,6 +192,82 @@ describe("coagentica — barreiras arquiteturais", () => {
         expect(
           imports,
           `${relativePath(filePath)} contém import proibido de intelligence-core`
+        ).toHaveLength(0);
+      }
+    );
+  });
+
+  describe("operations-kernel/contracts/entity.ts — entity é puro e não importa @/lib", () => {
+    const entityFile = join(CORE_CONTRACTS, "entity.ts");
+
+    it("não contém import de @/lib", () => {
+      const content = readFileContent(entityFile);
+      const imports = content.match(/import\s+.*from\s+["']@\/lib\/[^"']+["']/g) ?? [];
+      expect(imports).toHaveLength(0);
+    });
+    it("não contém import de tenant-runtime", () => {
+      const content = readFileContent(entityFile);
+      const imports = content.match(/import\s+.*from\s+["'][^"']*tenant-runtime[^"']*["']/g) ?? [];
+      expect(imports).toHaveLength(0);
+    });
+  });
+
+  describe("tenant-runtime/contracts/state.ts — state é puro e não importa @/lib", () => {
+    const stateFile = join(TENANT_RUNTIME, "contracts", "state.ts");
+
+    it("não contém import de @/lib", () => {
+      const content = readFileContent(stateFile);
+      const imports = content.match(/import\s+.*from\s+["']@\/lib\/[^"']+["']/g) ?? [];
+      expect(imports).toHaveLength(0);
+    });
+    it("não contém import de intelligence", () => {
+      const content = readFileContent(stateFile);
+      const imports = content.match(/import\s+.*from\s+["'][^"']*intelligence[^"']*["']/g) ?? [];
+      expect(imports).toHaveLength(0);
+    });
+  });
+
+  describe("tenant-runtime/ports/state-source.ts — ports podem importar operations-kernel", () => {
+    const portFile = join(TENANT_PORTS, "state-source.ts");
+
+    it("pode importar operations-kernel/contracts/entity", () => {
+      const content = readFileContent(portFile);
+      expect(content).toContain("operations-kernel");
+    });
+  });
+
+  describe("integrations/deskcomm/state-adapters.ts — adapter pode importar @/lib", () => {
+    const adapterFile = join(INTEGRATIONS_DESKCOMM, "state-adapters.ts");
+
+    it("contém import de @/lib/database.types", () => {
+      const content = readFileContent(adapterFile);
+      const imports = content.match(/import\s+.*from\s+["']@\/lib\/database\.types["']/g) ?? [];
+      expect(imports.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe("coagentica/integrations/ não importa intelligence ou business-engine", () => {
+    const files = [join(INTEGRATIONS_DESKCOMM, "state-adapters.ts")];
+
+    it.each(files)(
+      "%s não importa intelligence",
+      (filePath) => {
+        const content = readFileContent(filePath);
+        const imports = content.match(/import\s+.*from\s+["'][^"']*intelligence[^"']*["']/g) ?? [];
+        expect(
+          imports,
+          `${relativePath(filePath)} contém import proibido de intelligence`
+        ).toHaveLength(0);
+      }
+    );
+    it.each(files)(
+      "%s não importa business-engine",
+      (filePath) => {
+        const content = readFileContent(filePath);
+        const imports = content.match(/import\s+.*from\s+["'][^"']*business-engine[^"']*["']/g) ?? [];
+        expect(
+          imports,
+          `${relativePath(filePath)} contém import proibido de business-engine`
         ).toHaveLength(0);
       }
     );

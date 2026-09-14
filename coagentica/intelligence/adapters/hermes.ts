@@ -88,67 +88,17 @@ export function requireHermesAdapter(adapter: HermesAdapter): HermesAdapter {
   return adapter;
 }
 
-export function toOrchestratorPort(adapter: HermesAdapter): OrchestratorPort | null {
+export function toOrchestratorPort(
+  adapter: HermesAdapter,
+  params: {
+    request: IntelligenceRequest;
+    context: ContextEnvelope;
+    invocation: CapabilityInvocation;
+    decision: DecisionRecord;
+  }
+): OrchestratorPort | null {
   if (!adapter.available) {
     return null;
   }
-  const request: IntelligenceRequest = {
-    requestId: `hermes-${Date.now()}`,
-    tenantContext: {
-      tenantId: "",
-      organizationId: "",
-      organizationName: "",
-      role: "agent",
-      visibilityMode: "own",
-      locale: "",
-      timezone: "UTC",
-      isPlatformAdmin: false,
-    },
-    actorContext: {
-      actorId: "hermes",
-      actorType: "agent",
-      tenantContext: {
-        tenantId: "",
-        organizationId: "",
-        organizationName: "",
-        role: "agent",
-        visibilityMode: "own",
-        locale: "",
-        timezone: "UTC",
-        isPlatformAdmin: false,
-      },
-    },
-    capability: "hermes_orchestration",
-    input: {},
-    metadata: {},
-    timestamp: new Date().toISOString(),
-  };
-  const context: ContextEnvelope = {
-    tenantContext: request.tenantContext,
-    actorContext: request.actorContext,
-    additionalContext: {},
-    correlationId: "",
-  };
-  const invocation: CapabilityInvocation = {
-    invocationId: `hermes-${Date.now()}`,
-    capability: "hermes",
-    input: {},
-    status: "pending",
-    startedAt: new Date().toISOString(),
-    metadata: {},
-    actorContext: request.actorContext,
-  };
-  const decision: DecisionRecord = {
-    decisionId: `hermes-${Date.now()}`,
-    tenantId: "",
-    actorId: "hermes",
-    correlationId: "",
-    capability: "hermes",
-    decision: "allow",
-    reason: "Hermes orchestrator port",
-    inputHash: "",
-    timestamp: new Date().toISOString(),
-    metadata: {},
-  };
-  return createOrchestratorPort({ request, context, invocation, decision });
+  return createOrchestratorPort(params);
 }

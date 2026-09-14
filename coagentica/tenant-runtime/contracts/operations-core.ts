@@ -1,6 +1,9 @@
+import type { ActorType, Role } from "@/coagentica/foundation/contracts/tenancy";
 import type { PolicyDecision } from "@/coagentica/operations-kernel/contracts/policy";
 import type { WorkflowDefinition, WorkflowRun } from "@/coagentica/operations-kernel/contracts/workflow";
 import type { EventEnvelope } from "@/coagentica/operations-kernel/contracts/domain-event";
+import { createTenantStateSnapshot, validateTenantStateSnapshot } from "./state";
+import type { TenantStateSnapshot } from "./state";
 
 export interface TenantOperationsCore {
   readonly tenantId: string;
@@ -11,13 +14,14 @@ export interface TenantOperationsCore {
   readonly publishedDefinitions: WorkflowDefinition[];
   readonly eventLog: EventEnvelope[];
   readonly policyDecisions: PolicyDecision[];
+  readonly state: TenantStateSnapshot;
 }
 
 export interface ActorContextCore {
   readonly actorId: string;
-  readonly actorType: string;
+  readonly actorType: ActorType;
   readonly tenantId: string;
-  readonly role: string;
+  readonly role: Role;
   readonly isPlatformAdmin: boolean;
   readonly correlationId?: string;
 }
@@ -53,6 +57,7 @@ export function createTenantOperationsCore(params: {
     publishedDefinitions: [],
     eventLog: [],
     policyDecisions: [],
+    state: createTenantStateSnapshot({ tenantId: params.tenantId }),
   };
 }
 
@@ -72,6 +77,16 @@ export function addEventEnvelope(core: TenantOperationsCore, envelope: EventEnve
   return { ...core, eventLog: [...core.eventLog, envelope] };
 }
 
+export function withTenantState(core: TenantOperationsCore, state: TenantStateSnapshot): TenantOperationsCore {
+  if (state.tenantId !== core.tenantId) {
+    throw new Error("state pertence a outro tenant");
+  }
+  if (state.version < core.state.version) {
+    throw new Error("state version é anterior ao snapshot atual");
+  }
+  return { ...core, state };
+}
+
 export function isTenantBoundToCore(core: TenantOperationsCore, tenantId: string): boolean {
   return core.tenantId === tenantId;
 }
@@ -86,6 +101,14 @@ export function validateTenantOperationsCore(core: TenantOperationsCore): readon
   }
   if (!core.actorContext.actorId || core.actorContext.actorId.trim() === "") {
     errors.push("actorContext.actorId é obrigatório");
+  }
+  if (!core.state || core.state.tenantId.trim() === "") {
+    errors.push("state.tenantId é obrigatório");
+  } else {
+    if (core.state.tenantId !== core.tenantId) {
+      errors.push("state pertence a outro tenant");
+    }
+    errors.push(...validateTenantStateSnapshot(core.state).map((error) => `state.${error}`));
   }
   return errors;
 }

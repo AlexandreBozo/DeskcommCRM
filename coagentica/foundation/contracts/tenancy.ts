@@ -260,7 +260,7 @@ export function validateTenantContext(ctx: TenantContext): readonly string[] {
   if (!["viewer", "agent", "ai_operator", "manager", "admin"].includes(ctx.role)) {
     errors.push("role inválido");
   }
-  if (!["own", "own_and_unassigned", "team", "org"].includes(ctx.visibilityMode)) {
+  if (!["all", "own_and_unassigned", "own"].includes(ctx.visibilityMode)) {
     errors.push("visibilityMode inválido");
   }
   if (!isNonEmptyString(ctx.locale)) {
