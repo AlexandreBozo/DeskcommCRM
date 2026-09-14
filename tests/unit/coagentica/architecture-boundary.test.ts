@@ -89,6 +89,28 @@ describe("coagentica — barreiras arquiteturais", () => {
     );
   });
 
+  describe("tenant-runtime/ não importa infraestrutura, integrations ou intelligence", () => {
+    const files = collectTsFiles(TENANT_RUNTIME);
+
+    it.each(files)("%s não importa Supabase", (filePath) => {
+      const content = readFileContent(filePath);
+      const imports = content.match(/import\s+.*from\s+["']@supabase\/[^"']+["']/g) ?? [];
+      expect(imports, `${relativePath(filePath)} contém import proibido de Supabase`).toHaveLength(0);
+    });
+
+    it.each(files)("%s não importa integrations/Deskcomm", (filePath) => {
+      const content = readFileContent(filePath);
+      const imports = content.match(/import\s+.*from\s+["'][^"']*(?:coagentica\/integrations|deskcomm)[^"']*["']/g) ?? [];
+      expect(imports, `${relativePath(filePath)} contém import proibido de integration/Deskcomm`).toHaveLength(0);
+    });
+
+    it.each(files)("%s não importa intelligence/Hermes/AI SDK", (filePath) => {
+      const content = readFileContent(filePath);
+      const imports = content.match(/import\s+.*from\s+["'][^"']*(?:coagentica\/intelligence|hermes|ai-sdk|anthropic|openai|google-generative)[^"']*["']/gi) ?? [];
+      expect(imports, `${relativePath(filePath)} contém import proibido de intelligence/Hermes/AI SDK`).toHaveLength(0);
+    });
+  });
+
   describe("intelligence/ não importa @/lib (Deskcomm)", () => {
     const files = collectTsFiles(INTELLIGENCE).filter(
       (f) => !f.includes("/adapters/")
@@ -179,6 +201,11 @@ describe("coagentica — barreiras arquiteturais", () => {
         ).toHaveLength(0);
       }
     );
+    it.each(files)("%s não importa Hermes", (filePath) => {
+      const content = readFileContent(filePath);
+      const imports = content.match(/import\s+.*from\s+["'][^"']*hermes[^"']*["']/gi) ?? [];
+      expect(imports, `${relativePath(filePath)} contém import proibido de Hermes`).toHaveLength(0);
+    });
   });
 
   describe("intelligence/ não importa intelligence-core/", () => {
@@ -247,7 +274,7 @@ describe("coagentica — barreiras arquiteturais", () => {
   });
 
   describe("coagentica/integrations/ não importa intelligence ou business-engine", () => {
-    const files = [join(INTEGRATIONS_DESKCOMM, "state-adapters.ts")];
+    const files = collectTsFiles(INTEGRATIONS_DESKCOMM);
 
     it.each(files)(
       "%s não importa intelligence",

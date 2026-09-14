@@ -59,6 +59,25 @@ export interface CapabilityReadPort {
   ): Promise<readonly TenantCapability[]>;
 }
 
+export interface TenantStateSourceData {
+  readonly tenantId: string;
+  readonly entities: readonly EntitySnapshot[];
+  readonly relationships: readonly RelationshipRef[];
+  readonly knowledgeSources: readonly TenantKnowledgeSource[];
+  readonly memoryEntries: readonly TenantMemoryEntry[];
+  readonly goals: readonly TenantGoal[];
+  readonly capabilities: readonly TenantCapability[];
+  readonly sourceVersion?: number;
+}
+
+/**
+ * Porta mínima para hidratar o estado operacional de um tenant.
+ * Implementações concretas vivem em integrations/ e nunca no Tenant Runtime.
+ */
+export interface TenantStateSourcePort {
+  loadTenantState(tenantId: string): Promise<TenantStateSourceData>;
+}
+
 export interface StateSnapshotReadPort {
   getSnapshot(tenantId: string): Promise<TenantStateSnapshot | null>;
   getSnapshotVersion(tenantId: string): Promise<number>;
