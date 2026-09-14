@@ -2,4 +2,5 @@ export * from "./contracts";
 export * from "./orchestrator-port";
 export * from "./ports";
 export * from "./runtime";
+export * from "./capability-registry";
 // Adapters são importados explicitamente por caminho. O barrel canônico permanece puro.

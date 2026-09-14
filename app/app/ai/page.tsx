@@ -1,6 +1,8 @@
 import { NavHub } from "@/components/shell/NavHub";
 import { requireAuth, resolveActiveOrg } from "@/lib/auth/server";
 
+import { RuntimePanel } from "./_components/RuntimePanel";
+
 export const dynamic = "force-dynamic";
 
 /**
@@ -16,13 +18,16 @@ export default async function AiHubPage() {
   const activeOrg = await resolveActiveOrg(user);
 
   return (
-    <NavHub
-      group="ia"
-      isPlatformAdmin={user.is_platform_admin && !user.support}
-      role={activeOrg?.role ?? null}
-      interfaceSettings={activeOrg?.interface_settings}
-      title="Agente de IA"
-      subtitle="Tudo que define quem atende por você — e como acompanhar o que ele faz."
-    />
+    <div className="flex h-full flex-col gap-6 p-6">
+      <NavHub
+        group="ia"
+        isPlatformAdmin={user.is_platform_admin && !user.support}
+        role={activeOrg?.role ?? null}
+        interfaceSettings={activeOrg?.interface_settings}
+        title="Agente de IA"
+        subtitle="Tudo que define quem atende por você — e como acompanhar o que ele faz."
+      />
+      <RuntimePanel />
+    </div>
   );
 }

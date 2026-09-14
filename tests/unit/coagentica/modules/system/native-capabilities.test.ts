@@ -1,0 +1,88 @@
+import { describe, expect, it } from "vitest";
+import { createActorContext, createTenantContext } from "@/coagentica/foundation/contracts/tenancy";
+import { createIntelligenceRequest, type CapabilityInvocation } from "@/coagentica/intelligence/contracts";
+import { createSystemNativeCapabilities } from "@/coagentica/modules/system/native-capabilities";
+import type { CapabilityExecuteInput } from "@/coagentica/intelligence/ports/capability-executor-port";
+
+const tenantContext = createTenantContext({
+  tenantId: "tenant-1",
+  organizationId: "tenant-1",
+  organizationName: "Tenant",
+  role: "viewer",
+  visibilityMode: "all",
+  locale: "pt-BR",
+  timezone: "America/Sao_Paulo",
+  isPlatformAdmin: false,
+});
+const actorContext = createActorContext({
+  actorId: "11111111-1111-4111-8111-111111111111",
+  actorType: "human",
+  tenantContext,
+  correlationId: "corr-1",
+});
+
+function input(capability: string, context: CapabilityExecuteInput["context"]): CapabilityExecuteInput {
+  const request = createIntelligenceRequest({
+    requestId: "req-1",
+    tenantContext,
+    actorContext,
+    capability,
+    input: {},
+  });
+  const invocation: CapabilityInvocation = {
+    invocationId: "inv-1",
+    capability,
+    input: {},
+    status: "pending",
+    startedAt: request.timestamp,
+    metadata: {},
+    actorContext,
+  };
+  return { request, invocation, context };
+}
+
+const view = {
+  tenantId: "tenant-1",
+  organizationId: "tenant-1",
+  sourceVersion: 1,
+  snapshotAt: "2026-09-14T00:00:00.000Z",
+  entities: [{
+    entityId: "c-1",
+    entityKind: "contact",
+    version: 1,
+    data: { email: "secret@example.com" },
+    updatedAt: "2026-09-14T00:00:00.000Z",
+    source: "test",
+  }],
+  relationships: [],
+  knowledgeSources: [{ sourceId: "k-1", name: "Privado", type: "document", status: "active", metadata: { secret: true } }],
+  memoryEntries: [{ entryId: "m-1", type: "fact", content: "PII", status: "active", metadata: {} }],
+  goals: [],
+  capabilities: [{ capabilityId: "cap-1", name: "cap-1", type: "tool", status: "available", config: { token: "x" }, metadata: {} }],
+  truncated: { entities: false, relationships: false, knowledgeSources: false, memoryEntries: false, goals: false, capabilities: false },
+} as CapabilityExecuteInput["context"];
+
+describe("system native capabilities", () => {
+  it("context summary retorna contagens sem dados brutos", async () => {
+    const handler = createSystemNativeCapabilities().find((x) => x.capability === "tenant.context.summary")!;
+    const result = await handler.execute(input(handler.capability, view));
+    const output = result.output as Record<string, unknown>;
+    expect(output.counts).toMatchObject({ entities: 1, memoryEntries: 1, knowledgeSources: 1 });
+    expect(JSON.stringify(output)).not.toContain("secret@example.com");
+    expect(JSON.stringify(output)).not.toContain("PII");
+  });
+
+  it("capability list não expõe config ou metadata", async () => {
+    const handler = createSystemNativeCapabilities().find((x) => x.capability === "tenant.capabilities.list")!;
+    const result = await handler.execute(input(handler.capability, view));
+    expect(JSON.stringify(result.output)).not.toContain("token");
+    expect(JSON.stringify(result.output)).not.toContain("metadata");
+  });
+
+  it("runtime info funciona sem contexto", async () => {
+    const handler = createSystemNativeCapabilities().find((x) => x.capability === "system.runtime.info")!;
+    const result = await handler.execute(input(handler.capability, null));
+    expect(result.status).toBe("completed");
+    expect(result.output).toMatchObject({ architecture: "coagentica", intelligenceRuntime: "v0.5" });
+  });
+});
