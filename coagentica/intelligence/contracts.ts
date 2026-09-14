@@ -1,5 +1,5 @@
 import type { TenantContext, ActorContext } from "@/coagentica/foundation/contracts/tenancy";
-import type { PolicyDecision } from "@/coagentica/operations-core/contracts/policy";
+import type { PolicyDecision } from "@/coagentica/operations-kernel/contracts/policy";
 
 export interface IntelligenceRequest<T = Record<string, unknown>> {
   readonly requestId: string;

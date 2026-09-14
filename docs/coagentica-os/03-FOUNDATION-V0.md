@@ -7,7 +7,7 @@
 
 A Foundation transforma o Deskcomm em base operacional da Coagentica sem fazer do Deskcomm o núcleo da plataforma. O domínio canônico deve permanecer independente dos detalhes do CRM legado, dos providers de IA e de qualquer orquestrador externo.
 
-A arquitetura é dividida em três camadas principais:
+A arquitetura é dividida em quatro responsabilidades principais:
 
 ```text
 Platform Foundation
@@ -16,16 +16,23 @@ Platform Foundation
 ├── permissions
 └── audit
 
-Tenant Operations Core
-├── entities
-├── events
-├── policies
-├── workflows
-├── context
-├── memory
-├── knowledge
-├── goals
-└── capabilities
+Operations Kernel
+├── event contracts
+├── policy contracts
+├── workflow contracts
+└── execution semantics
+
+Tenant Runtime
+└── Tenant Operations Core
+    ├── entities
+    ├── events
+    ├── policies
+    ├── workflows
+    ├── context
+    ├── memory
+    ├── knowledge
+    ├── goals
+    └── capabilities
 
 Shared Intelligence Runtime
 ├── context engine
@@ -45,11 +52,13 @@ O estado operacional, regras, workflows, eventos, contexto, conhecimento, memór
 
 Não é necessário criar um serviço ou container separado por cliente. O isolamento é lógico e obrigatório.
 
-## Operations Core
+## Operations Kernel e Tenant Operations Core
 
-`coagentica/operations-core` é a fonte canônica para contratos operacionais.
+`coagentica/operations-kernel` é o motor compartilhado e a fonte canônica para contratos operacionais como eventos, policies e workflows.
 
-Ele não pode depender de `@/lib/*`, de componentes internos do Deskcomm, de WAHA, de providers de IA ou de Hermes.
+`coagentica/tenant-runtime` representa o runtime lógico de cada organização. É ali que vive o `TenantOperationsCore`, isto é, o estado operacional isolado daquele cliente.
+
+O Operations Kernel não pode conhecer um tenant específico nem depender de `tenant-runtime`, `@/lib/*`, componentes internos do Deskcomm, WAHA, providers de IA ou Hermes.
 
 Dependências de legado pertencem aos adapters:
 
@@ -115,14 +124,14 @@ Fase 5  Coagentica opera integralmente sem Hermes
 
 Deskcomm continua sendo uma implementação operacional importante, mas não define o domínio canônico.
 
-É permitido importar tipos e APIs do Deskcomm dentro de adapters e integrações. Não é permitido importá-los dentro de `operations-core/contracts` ou do núcleo de `intelligence`.
+É permitido importar tipos e APIs do Deskcomm dentro de adapters e integrações. Não é permitido importá-los dentro de `operations-kernel/contracts`, `tenant-runtime` ou do núcleo de `intelligence`.
 
 ## Compatibilidade
 
 Durante a migração, os caminhos antigos podem reexportar contratos novos para evitar quebra imediata:
 
 ```text
-business-engine -> operations-core
+business-engine -> operations-kernel
 intelligence-core -> intelligence
 ```
 
@@ -132,7 +141,7 @@ Código novo deve importar apenas os caminhos canônicos.
 
 A suíte de arquitetura deve impedir regressões como:
 
-1. `operations-core/contracts` importar `@/lib/*`.
+1. `operations-kernel/contracts` ou `tenant-runtime` importar `@/lib/*`.
 2. `intelligence` depender de Hermes fora de `adapters/hermes.ts`.
 3. contratos canônicos dependerem dos aliases legados.
 4. estado global mutável armazenar dados de tenants.
@@ -148,7 +157,7 @@ A fase pode ser considerada fechada quando:
 - arquitetura passar typecheck, lint e testes de fronteira;
 - o runtime existente continuar saudável;
 - nenhuma dependência obrigatória de Hermes existir;
-- os primeiros fluxos reais do Deskcomm forem traduzidos para `Operations Core` sem alterar o hot path de produção.
+- os primeiros fluxos reais do Deskcomm forem traduzidos pelo `Operations Kernel` para o `Tenant Operations Core` sem alterar o hot path de produção.
 
 ## Próxima fase
 

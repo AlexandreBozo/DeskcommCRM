@@ -1,4 +1,4 @@
-export type { PolicyDecision } from "@/coagentica/operations-core/contracts/policy";
-export { allow, deny, defer, isAllowed, isDenied, isDeferred, validatePolicyDecision, policyDecisionFromActorContext } from "@/coagentica/operations-core/contracts/policy";
-export type { WorkflowDefinition, WorkflowRun, WorkflowRunSnapshot, WorkflowStatus, WorkflowGraph, WorkflowGraphNode, WorkflowGraphEdge } from "@/coagentica/operations-core/contracts/workflow";
-export { createWorkflowDefinition, createWorkflowRun, validateWorkflowDefinition, validateWorkflowRun, isWorkflowTerminal, canWorkflowTransition } from "@/coagentica/operations-core/contracts/workflow";
+export type { PolicyDecision } from "@/coagentica/operations-kernel/contracts/policy";
+export { allow, deny, defer, isAllowed, isDenied, isDeferred, validatePolicyDecision, policyDecisionFromActorContext } from "@/coagentica/operations-kernel/contracts/policy";
+export type { WorkflowDefinition, WorkflowRun, WorkflowRunSnapshot, WorkflowStatus, WorkflowGraph, WorkflowGraphNode, WorkflowGraphEdge } from "@/coagentica/operations-kernel/contracts/workflow";
+export { createWorkflowDefinition, createWorkflowRun, validateWorkflowDefinition, validateWorkflowRun, isWorkflowTerminal, canWorkflowTransition } from "@/coagentica/operations-kernel/contracts/workflow";

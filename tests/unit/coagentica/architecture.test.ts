@@ -7,9 +7,9 @@ import { join, relative } from "path";
  * não é violada por imports acidentais.
  *
  * Regras:
- * 1. operations-core/contracts e intelligence NÃO importam @/lib (Deskcomm).
+ * 1. foundation/contracts, operations-kernel/contracts e intelligence NÃO importam @/lib (Deskcomm).
  * 2. intelligence (exceto adapters/) NÃO menciona "hermes".
- * 3. operations-core e intelligence NÃO importam business-engine ou intelligence-core.
+ * 3. operations-kernel e intelligence NÃO importam business-engine ou intelligence-core.
  */
 
 const ROOT = join(__dirname, "..", "..", "..");
@@ -34,9 +34,10 @@ function readRelative(filePath: string): string {
 }
 
 describe("Arquitetura — separação de camadas", () => {
-  describe("Regra 1: operations-core/contracts e intelligence não importam @/lib", () => {
+  describe("Regra 1: contratos canônicos e intelligence não importam @/lib", () => {
     const forbiddenPaths = [
-      join(COAGENTICA, "operations-core", "contracts"),
+      join(COAGENTICA, "foundation", "contracts"),
+      join(COAGENTICA, "operations-kernel", "contracts"),
       join(COAGENTICA, "intelligence"),
     ];
 
@@ -56,7 +57,7 @@ describe("Arquitetura — separação de camadas", () => {
       }
     }
 
-    it("nenhum arquivo em operations-core/contracts ou intelligence importa @/lib", () => {
+    it("nenhum contrato canônico ou núcleo de intelligence importa @/lib", () => {
       expect(offendingFiles).toEqual([]);
     });
   });
@@ -79,9 +80,9 @@ describe("Arquitetura — separação de camadas", () => {
     });
   });
 
-  describe("Regra 3: operations-core e intelligence não importam business-engine ou intelligence-core", () => {
+  describe("Regra 3: operations-kernel e intelligence não importam business-engine ou intelligence-core", () => {
     const sourceDirs = [
-      join(COAGENTICA, "operations-core"),
+      join(COAGENTICA, "operations-kernel"),
       join(COAGENTICA, "intelligence"),
     ];
     const offendingFiles: string[] = [];
@@ -101,7 +102,7 @@ describe("Arquitetura — separação de camadas", () => {
       }
     }
 
-    it("operations-core e intelligence não importam business-engine ou intelligence-core", () => {
+    it("operations-kernel e intelligence não importam business-engine ou intelligence-core", () => {
       expect(offendingFiles).toEqual([]);
     });
   });

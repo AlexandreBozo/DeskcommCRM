@@ -3,9 +3,11 @@ import { readFileSync, readdirSync, statSync } from "fs";
 import { join, relative } from "path";
 
 const ROOT = join(__dirname, "../../..");
-const CORE_CONTRACTS = join(ROOT, "coagentica/operations-core/contracts");
+const FOUNDATION_CONTRACTS = join(ROOT, "coagentica/foundation/contracts");
+const CORE_CONTRACTS = join(ROOT, "coagentica/operations-kernel/contracts");
+const TENANT_RUNTIME = join(ROOT, "coagentica/tenant-runtime");
 const INTELLIGENCE = join(ROOT, "coagentica/intelligence");
-const OPS_ADAPTERS = join(ROOT, "coagentica/operations-core/adapters");
+const OPS_ADAPTERS = join(ROOT, "coagentica/operations-kernel/adapters");
 
 function collectTsFiles(dir: string): string[] {
   const files: string[] = [];
@@ -37,7 +39,23 @@ function relativePath(full: string): string {
  * dependências obedece às regras arquiteturais do coagentica.
  */
 describe("coagentica — barreiras arquiteturais", () => {
-  describe("contracts/operations-core não importa @/lib (Deskcomm)", () => {
+  describe("foundation/contracts não importa @/lib (Deskcomm)", () => {
+    const files = collectTsFiles(FOUNDATION_CONTRACTS);
+
+    it.each(files)(
+      "%s não contém import de @/lib",
+      (filePath) => {
+        const content = readFileContent(filePath);
+        const imports = content.match(/import\s+.*from\s+[\"']@\/lib\/[^\"']+[\"']/g) ?? [];
+        expect(
+          imports,
+          `${relativePath(filePath)} contém imports proibidos de @/lib: ${imports.join(", ")}`
+        ).toHaveLength(0);
+      }
+    );
+  });
+
+  describe("contracts/operations-kernel não importa @/lib (Deskcomm)", () => {
     const files = collectTsFiles(CORE_CONTRACTS);
 
     it.each(files)(
@@ -45,6 +63,22 @@ describe("coagentica — barreiras arquiteturais", () => {
       (filePath) => {
         const content = readFileContent(filePath);
         const imports = content.match(/import\s+.*from\s+["']@\/lib\/[^"']+["']/g) ?? [];
+        expect(
+          imports,
+          `${relativePath(filePath)} contém imports proibidos de @/lib: ${imports.join(", ")}`
+        ).toHaveLength(0);
+      }
+    );
+  });
+
+  describe("tenant-runtime/ não importa @/lib (Deskcomm)", () => {
+    const files = collectTsFiles(TENANT_RUNTIME);
+
+    it.each(files)(
+      "%s não contém import de @/lib",
+      (filePath) => {
+        const content = readFileContent(filePath);
+        const imports = content.match(/import\s+.*from\s+[\"']@\/lib\/[^\"']+[\"']/g) ?? [];
         expect(
           imports,
           `${relativePath(filePath)} contém imports proibidos de @/lib: ${imports.join(", ")}`
@@ -89,7 +123,26 @@ describe("coagentica — barreiras arquiteturais", () => {
     );
   });
 
-  describe("operations-core/ não importa business-engine/", () => {
+  describe("operations-kernel/ não conhece tenant-runtime/", () => {
+    const files = [
+      ...collectTsFiles(CORE_CONTRACTS),
+      ...collectTsFiles(OPS_ADAPTERS),
+    ];
+
+    it.each(files)(
+      "%s não importa tenant-runtime",
+      (filePath) => {
+        const content = readFileContent(filePath);
+        const imports = content.match(/import\s+.*from\s+[\"'][^\"']*tenant-runtime[^\"']*[\"']/g) ?? [];
+        expect(
+          imports,
+          `${relativePath(filePath)} contém import proibido de tenant-runtime`
+        ).toHaveLength(0);
+      }
+    );
+  });
+
+  describe("operations-kernel/ não importa business-engine/", () => {
     const files = [
       ...collectTsFiles(CORE_CONTRACTS),
       ...collectTsFiles(OPS_ADAPTERS),

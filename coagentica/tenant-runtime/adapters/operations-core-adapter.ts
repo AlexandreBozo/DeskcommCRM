@@ -1,5 +1,5 @@
 import type { TenantContext } from "@/coagentica/foundation/contracts/tenancy";
-import type { TenantOperationsCore } from "../contracts/tenant-operations-core";
+import type { TenantOperationsCore } from "../contracts/operations-core";
 
 export function adaptTenantContextToOperationsCore(
   tenantContext: TenantContext,

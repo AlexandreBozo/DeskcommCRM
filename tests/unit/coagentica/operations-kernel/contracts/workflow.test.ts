@@ -7,7 +7,7 @@ import {
   isWorkflowTerminal,
   canWorkflowTransition,
   type WorkflowGraph,
-} from "@/coagentica/operations-core/contracts/workflow";
+} from "@/coagentica/operations-kernel/contracts/workflow";
 import { createActorContext, createTenantContext } from "@/coagentica/foundation/contracts/tenancy";
 
 const baseTenantParams = {
@@ -54,7 +54,7 @@ const baseRunParams = {
   actorContext: baseActorContext,
 };
 
-describe("coagentica/operations-core/contracts/workflow", () => {
+describe("coagentica/operations-kernel/contracts/workflow", () => {
   describe("createWorkflowDefinition", () => {
     it("cria WorkflowDefinition válido", () => {
       const def = createWorkflowDefinition({ ...baseWorkflowParams, tags: ["tag1"] });

@@ -9,15 +9,15 @@ import {
   validateTenantOperationsCore,
   type TenantOperationsCore,
   type PermissionCheck,
-} from "@/coagentica/operations-core/contracts/tenant-operations-core";
+} from "@/coagentica/tenant-runtime/contracts/operations-core";
 import type { ActorContext } from "@/coagentica/foundation/contracts/tenancy";
-import type { WorkflowRun, PolicyDecision } from "@/coagentica/operations-core/contracts";
-import type { EventEnvelope } from "@/coagentica/operations-core/contracts/domain-event";
+import type { WorkflowRun, PolicyDecision } from "@/coagentica/operations-kernel/contracts";
+import type { EventEnvelope } from "@/coagentica/operations-kernel/contracts/domain-event";
 import { createTenantContext } from "@/coagentica/foundation/contracts/tenancy";
 
 const baseTenantParams = { tenantId: "t1", organizationId: "org", organizationName: "Test Org", role: "agent" as const, visibilityMode: "own_and_unassigned" as const, locale: "pt-BR", timezone: "America/Sao_Paulo", isPlatformAdmin: false };
 
-describe("coagentica/operations-core/contracts/tenant-operations-core", () => {
+describe("coagentica/tenant-runtime/contracts/operations-core", () => {
   describe("createTenantOperationsCore", () => {
     it("cria TenantOperationsCore válido", () => {
       const core = createTenantOperationsCore({

@@ -1,8 +1,8 @@
 /**
  * Tipos canônicos do domínio — definidos aqui para que foundation (e
- * consequentemente operations-core/intelligence) não dependa de `@/lib`.
+ * consequentemente operations-kernel/intelligence) não dependa de `@/lib`.
  * A adaptação dos tipos legados do Deskcomm para estes vive em
- * `operations-core/adapters/` ou `foundation/adapters/` (quando existir).
+ * `operations-kernel/adapters/` ou `foundation/adapters/` (quando existir).
  */
 
 /** Papel do ator dentro de uma organização. Equivalente a `Role` de `lib/auth/types`. */

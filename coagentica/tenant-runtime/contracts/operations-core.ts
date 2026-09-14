@@ -1,6 +1,6 @@
-import type { PolicyDecision } from "./policy";
-import type { WorkflowDefinition, WorkflowRun } from "./workflow";
-import type { EventEnvelope } from "./domain-event";
+import type { PolicyDecision } from "@/coagentica/operations-kernel/contracts/policy";
+import type { WorkflowDefinition, WorkflowRun } from "@/coagentica/operations-kernel/contracts/workflow";
+import type { EventEnvelope } from "@/coagentica/operations-kernel/contracts/domain-event";
 
 export interface TenantOperationsCore {
   readonly tenantId: string;

@@ -4,9 +4,9 @@ import type { TenantContext } from "@/coagentica/foundation/contracts/tenancy";
  * Registro canônico de evento de origem — equivalente estrutural ao EventRow
  * do Deskcomm (`lib/event-log/dispatcher`), mas sem dependência de runtime.
  *
- * Este tipo existe para que operations-core/contracts não importe `@/lib`.
+ * Este tipo existe para que operations-kernel/contracts não importe `@/lib`.
  * A adaptação do formato legado EventRow para este tipo vive em
- * `operations-core/adapters/domain-event-adapter.ts`.
+ * `operations-kernel/adapters/domain-event-adapter.ts`.
  */
 export interface SourceEventRecord {
   readonly id: string;

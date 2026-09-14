@@ -8,7 +8,7 @@ import {
   validateDecisionRecord,
 } from "@/coagentica/intelligence/contracts";
 import { createActorContext, createTenantContext } from "@/coagentica/foundation/contracts/tenancy";
-import { allow } from "@/coagentica/operations-core/contracts/policy";
+import { allow } from "@/coagentica/operations-kernel/contracts/policy";
 
 const baseTenantParams = { tenantId: "tenant-123", organizationId: "org-456", organizationName: "Test Org", role: "agent" as const, visibilityMode: "own_and_unassigned" as const, locale: "pt-BR", timezone: "America/Sao_Paulo", isPlatformAdmin: false };
 const baseTenantContext = createTenantContext(baseTenantParams);

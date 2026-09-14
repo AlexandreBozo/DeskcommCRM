@@ -4,9 +4,9 @@ import type { ActorContext } from "@/coagentica/foundation/contracts/tenancy";
  * Grafo canônico de workflow — equivalente estrutural ao FlowGraph do Deskcomm
  * (`lib/followup/graph-schema`), mas sem dependência de Zod ou runtime legado.
  *
- * Este tipo existe para que operations-core/contracts não importe `@/lib`.
+ * Este tipo existe para que operations-kernel/contracts não importe `@/lib`.
  * A adaptação do FlowGraph Zod-validated para este tipo vive em
- * `operations-core/adapters/workflow-adapter.ts`.
+ * `operations-kernel/adapters/workflow-adapter.ts`.
  *
  * O shape é intencionalmente minimalista: `nodes` e `edges` com os campos que
  * o contrato de operações realmente lê. O runtime legado mantém o Zod schema

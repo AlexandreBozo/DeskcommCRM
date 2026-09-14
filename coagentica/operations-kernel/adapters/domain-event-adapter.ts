@@ -6,7 +6,7 @@ export type { DomainEvent, EventEnvelope, SourceEventRecord } from "../contracts
 
 /**
  * Converte EventRow (formato legado do Deskcomm) para SourceEventRecord
- * (tipo canônico do operations-core).
+ * (tipo canônico do operations-kernel).
  */
 export function adaptEventRowToRecord(row: EventRow): SourceEventRecord {
   return {

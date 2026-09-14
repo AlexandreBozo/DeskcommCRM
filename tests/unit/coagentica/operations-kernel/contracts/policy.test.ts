@@ -6,7 +6,7 @@ import {
   validatePolicyDecision,
   policyDecisionFromActorContext,
   type PolicyDecision,
-} from "@/coagentica/operations-core/contracts/policy";
+} from "@/coagentica/operations-kernel/contracts/policy";
 import { createActorContext, createTenantContext } from "@/coagentica/foundation/contracts/tenancy";
 import type { Role, VisibilityMode } from "@/lib/auth/types";
 
@@ -31,7 +31,7 @@ const baseActorContext = createActorContext({
   correlationId: "corr-abc",
 });
 
-describe("coagentica/operations-core/contracts/policy", () => {
+describe("coagentica/operations-kernel/contracts/policy", () => {
   describe("allow", () => {
     it("cria PolicyDecision com decision allow", () => {
       const decision = allow({ reason: "User has permission", tenantId: "tenant-123", actorId: "actor-789", correlationId: "corr-abc" });

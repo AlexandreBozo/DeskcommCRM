@@ -14,7 +14,7 @@ import {
   createDecisionRecord,
   type IntelligenceRequest,
 } from "@/coagentica/intelligence/contracts";
-import { allow } from "@/coagentica/operations-core/contracts/policy";
+import { allow } from "@/coagentica/operations-kernel/contracts/policy";
 
 const baseTenantContext = createTenantContext({ tenantId: "tenant-123", organizationId: "org-456", organizationName: "Test Org", role: "agent", visibilityMode: "own_and_unassigned", locale: "pt-BR", timezone: "America/Sao_Paulo", isPlatformAdmin: false });
 const baseActorContext = createActorContext({ actorId: "actor-789", actorType: "human", tenantContext: baseTenantContext, correlationId: "corr-abc" });

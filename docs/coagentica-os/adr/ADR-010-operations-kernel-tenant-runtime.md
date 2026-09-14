@@ -1,4 +1,4 @@
-# ADR-010 — Operations Core por tenant e Intelligence Runtime compartilhado
+# ADR-010 — Operations Kernel compartilhado, Operations Core por tenant e Intelligence Runtime compartilhado
 
 **Status:** Aceito
 **Data:** 2026-09-13
@@ -62,7 +62,7 @@ Operations Core -> provider de IA
 
 A CI deve falhar se:
 
-- `operations-core/contracts` importar módulos de `@/lib`;
+- `operations-kernel/contracts` ou `tenant-runtime` importar módulos de `@/lib`;
 - `intelligence` importar Hermes fora do adapter autorizado;
 - novos módulos dependerem diretamente de aliases `business-engine` ou `intelligence-core`;
 - for introduzido estado global mutável contendo estado de tenant.

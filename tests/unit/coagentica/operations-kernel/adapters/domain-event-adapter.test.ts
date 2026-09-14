@@ -4,7 +4,7 @@ import {
   adaptEventRowToRecord,
   adaptDomainEventToEnvelope,
   type DomainEvent,
-} from "@/coagentica/operations-core/adapters/domain-event-adapter";
+} from "@/coagentica/operations-kernel/adapters/domain-event-adapter";
 import type { EventRow } from "@/lib/event-log/dispatcher";
 import type { TenantContext } from "@/coagentica/foundation/contracts/tenancy";
 
@@ -32,7 +32,7 @@ const baseEventRow: EventRow = {
   created_at: "2026-01-15T10:30:00Z",
 };
 
-describe("coagentica/operations-core/adapters/domain-event-adapter", () => {
+describe("coagentica/operations-kernel/adapters/domain-event-adapter", () => {
   describe("adaptEventRowToRecord", () => {
     it("converte EventRow para SourceEventRecord", () => {
       const record = adaptEventRowToRecord(baseEventRow);

@@ -8,7 +8,7 @@ import {
   createDomainEvent,
   createEventEnvelope,
   type SourceEventRecord,
-} from "@/coagentica/operations-core/contracts/domain-event";
+} from "@/coagentica/operations-kernel/contracts/domain-event";
 import type { TenantContext } from "@/coagentica/foundation/contracts/tenancy";
 
 const mockTenantContext: TenantContext = {
@@ -35,7 +35,7 @@ const baseEventRow: SourceEventRecord = {
   created_at: "2026-01-15T10:30:00Z",
 };
 
-describe("coagentica/operations-core/contracts/domain-event", () => {
+describe("coagentica/operations-kernel/contracts/domain-event", () => {
   describe("domainEventFromRecord", () => {
     it("converte SourceEventRecord para DomainEvent preservando campos", () => {
       const event = domainEventFromRecord(baseEventRow, "corr-abc", "cause-xyz");
