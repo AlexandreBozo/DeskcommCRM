@@ -3,7 +3,7 @@ import { createDeskcommDecisionStore } from "@/coagentica/modules/system/decisio
 import type { DecisionRecord } from "@/coagentica/intelligence/contracts";
 
 describe("deskcomm decision store", () => {
-  it("persiste decisão no audit log com tenant e hashes", async () => {
+  it("persiste decisão no audit log com tenant, id natural e hashes", async () => {
     const insert = vi.fn(async () => ({ error: null }));
     const from = vi.fn(() => ({ insert }));
     const client = { from } as never;
@@ -26,9 +26,13 @@ describe("deskcomm decision store", () => {
     expect(insert).toHaveBeenCalledWith(expect.objectContaining({
       organization_id: "tenant-1",
       actor_user_id: record.actorId,
-      resource_id: "dec-1",
+      resource_id: null,
       action: "coagentica.intelligence.decision",
-      metadata: expect.objectContaining({ input_hash: "h1", output_hash: "h2" }),
+      metadata: expect.objectContaining({
+        decision_id: "dec-1",
+        input_hash: "h1",
+        output_hash: "h2",
+      }),
     }));
   });
 

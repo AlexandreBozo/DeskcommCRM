@@ -5,9 +5,17 @@ import { expect, it } from "vitest";
 function files(dir:string):string[]{return readdirSync(dir,{withFileTypes:true}).flatMap(item=>item.isDirectory()?files(join(dir,item.name)):[join(dir,item.name)]);}
 it("todo handler mutante do app declara guarda de suporte ou é infraestrutura identificada",()=>{
  const uncovered:string[]=[];
+ const readOnlyPostRoutes=new Set([
+  // POST aqui é transporte de uma execução READ-ONLY do runtime nativo.
+  // O único efeito persistido é o DecisionRecord append-only de auditoria;
+  // não há mutação do estado operacional do tenant e bloquear em suporte
+  // tornaria impossível inspecionar o runtime durante uma sessão de suporte.
+  "app/api/v1/ai/runtime/route.ts",
+ ]);
  for(const path of files("app/api/v1").filter(p=>p.endsWith("/route.ts"))){
   if(/app\/api\/v1\/(cron|webhooks)\//.test(path)||path==="app/api/v1/system/agent/route.ts")continue; // segredo de máquina, sem actor/session cookie
   if(path.includes("/impersonate"))continue; // início/fim autenticam a posse e têm contrato próprio
+  if(readOnlyPostRoutes.has(path))continue; // POST sem efeito operacional: execução nativa read-only + audit append-only
   const source=ts.createSourceFile(path,readFileSync(path,"utf8"),ts.ScriptTarget.Latest,true);
   // DUAS FORMAS de exportar um handler, e o gate precisa das duas. A varredura
   // só enxergava `export async function POST`; `export const PATCH = async () => {}`

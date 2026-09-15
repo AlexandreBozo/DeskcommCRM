@@ -8,6 +8,7 @@ type AuditInsert = Database["public"]["Tables"]["api_audit_log"]["Insert"];
 
 function decisionMetadata(record: DecisionRecord): AuditInsert["metadata"] {
   return {
+    decision_id: record.decisionId,
     actor_id: record.actorId,
     correlation_id: record.correlationId,
     capability: record.capability,
@@ -31,7 +32,11 @@ export function createDeskcommDecisionStore(
         organization_id: record.tenantId,
         actor_user_id: record.actorId,
         resource_type: "coagentica_intelligence_decision",
-        resource_id: record.decisionId,
+        // api_audit_log.resource_id is UUID in the canonical schema, while
+        // DecisionRecord.decisionId is intentionally an opaque string
+        // (for example "<request-uuid>-authorization"). Keep the decision's
+        // natural id in metadata instead of coercing it into the UUID column.
+        resource_id: null,
         request_id: record.correlationId,
         metadata: decisionMetadata(record),
       };
