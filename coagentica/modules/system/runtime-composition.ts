@@ -17,6 +17,7 @@ import { createDeskcommModelGateway } from "@/coagentica/intelligence/adapters/d
 import { createTenantOperationalContextBridge } from "@/coagentica/intelligence/adapters/tenant-operational-context-bridge";
 import { createDefaultIntelligencePolicyGate } from "@/coagentica/intelligence/adapters/default-policy-gate";
 import { createDeskcommDecisionStore } from "./decision-store";
+import { createDeskcommLearningObserver } from "./learning-observer";
 import {
   createDeskcommTenantStateSource,
   createSupabaseDeskcommTenantStateQueryPort,
@@ -59,6 +60,7 @@ export function createCoagenticaSystemRuntime(
   const operationalContext = createTenantOperationalContextBridge(source);
   const policyGate = createDefaultIntelligencePolicyGate();
   const store = createDeskcommDecisionStore(client);
+  const learning = createDeskcommLearningObserver(client);
   const modelGateway = createDeskcommModelGateway();
   const planner = createDirectPlanner();
   const agentBudget = createAgentExecutionBudget();
@@ -77,6 +79,7 @@ export function createCoagenticaSystemRuntime(
         policyGate,
         operationalContext,
         planner,
+        learning,
         executor,
         store,
         hashValue,

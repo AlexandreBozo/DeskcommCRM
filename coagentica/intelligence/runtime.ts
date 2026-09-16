@@ -4,9 +4,11 @@ import type {
   IntelligenceRequest,
   PolicyConstraint,
 } from "./contracts";
+import { createLearningObservation } from "./contracts/learning";
 import { validateExecutionPlan, type ExecutionPlan } from "./contracts/planning";
 import type { CapabilityExecutorPort } from "./ports/capability-executor-port";
 import type { DecisionStorePort } from "./ports/decision-store-port";
+import type { LearningPort } from "./ports/learning-port";
 import type { PlanningPort } from "./ports/planning-port";
 import type { PolicyGatePort, PolicyGateResult } from "./ports/policy-gate-port";
 import type {
@@ -39,6 +41,7 @@ export interface IntelligenceRuntimeDeps {
   readonly policyGate: PolicyGatePort;
   readonly operationalContext: TenantOperationalContextPort;
   readonly planner: PlanningPort;
+  readonly learning: LearningPort;
   readonly executor: CapabilityExecutorPort;
   readonly store: DecisionStorePort;
   readonly hashValue: (value: unknown) => string;
@@ -168,6 +171,27 @@ async function persistDecision(
   }
 }
 
+async function persistOutcome(
+  deps: IntelligenceRuntimeDeps,
+  request: IntelligenceRequest,
+  record: DecisionRecord,
+  invocation?: CapabilityInvocation | null
+): Promise<DecisionRecord> {
+  const persisted = await persistDecision(deps, record, "outcome", invocation);
+  try {
+    await deps.learning.observe(
+      createLearningObservation({
+        request,
+        decision: persisted,
+        observedAt: deps.now(),
+      })
+    );
+  } catch {
+    // Learning v0.11 é estritamente observacional e não invalida o outcome durável.
+  }
+  return persisted;
+}
+
 function assertOperationalContextBoundary(
   context: TenantOperationalContextView,
   tenantId: string,
@@ -229,7 +253,7 @@ export async function runIntelligence(
       inputHash,
       timestamp,
     });
-    const persisted = await persistDecision(deps, decision, "outcome");
+    const persisted = await persistOutcome(deps, request, decision);
     return { decision: persisted, invocation: null, context: null };
   }
 
@@ -246,7 +270,7 @@ export async function runIntelligence(
       inputHash,
       timestamp,
     });
-    const persisted = await persistDecision(deps, decision, "outcome");
+    const persisted = await persistOutcome(deps, request, decision);
     return { decision: persisted, invocation: null, context: null };
   }
 
@@ -260,7 +284,7 @@ export async function runIntelligence(
       policyDecision: constraint,
       timestamp,
     });
-    const persisted = await persistDecision(deps, decision, "outcome");
+    const persisted = await persistOutcome(deps, request, decision);
     return { decision: persisted, invocation: null, context: null };
   }
 
@@ -273,7 +297,7 @@ export async function runIntelligence(
       policyDecision: constraint,
       timestamp,
     });
-    const persisted = await persistDecision(deps, decision, "outcome");
+    const persisted = await persistOutcome(deps, request, decision);
     return { decision: persisted, invocation: null, context: null };
   }
 
@@ -285,7 +309,7 @@ export async function runIntelligence(
       inputHash,
       timestamp,
     });
-    const persisted = await persistDecision(deps, decision, "outcome");
+    const persisted = await persistOutcome(deps, request, decision);
     return { decision: persisted, invocation: null, context: null };
   }
 
@@ -308,7 +332,7 @@ export async function runIntelligence(
         policyDecision: constraint,
         timestamp,
       });
-      const persisted = await persistDecision(deps, decision, "outcome");
+      const persisted = await persistOutcome(deps, request, decision);
       return { decision: persisted, invocation: null, context: null };
     }
   }
@@ -350,7 +374,7 @@ export async function runIntelligence(
       timestamp,
       metadata: { phase: "planning" },
     });
-    const persisted = await persistDecision(deps, decision, "outcome");
+    const persisted = await persistOutcome(deps, request, decision);
     return { decision: persisted, invocation: null, context };
   }
 
@@ -374,7 +398,7 @@ export async function runIntelligence(
         planningStrategy: plan.strategy,
       },
     });
-    const persisted = await persistDecision(deps, decision, "outcome", invocation);
+    const persisted = await persistOutcome(deps, request, decision, invocation);
     return { decision: persisted, invocation, context };
   }
 
@@ -395,7 +419,7 @@ export async function runIntelligence(
         planningStrategy: plan.strategy,
       },
     });
-    const persisted = await persistDecision(deps, decision, "outcome", executed);
+    const persisted = await persistOutcome(deps, request, decision, executed);
     return { decision: persisted, invocation: executed, context };
   }
 
@@ -415,6 +439,6 @@ export async function runIntelligence(
       planningStrategy: plan.strategy,
     },
   });
-  const persisted = await persistDecision(deps, decision, "outcome", executed);
+  const persisted = await persistOutcome(deps, request, decision, executed);
   return { decision: persisted, invocation: executed, context };
 }

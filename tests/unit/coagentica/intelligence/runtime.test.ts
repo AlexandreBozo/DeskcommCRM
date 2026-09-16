@@ -10,6 +10,7 @@ import {
 } from "@/coagentica/intelligence/contracts";
 import type { CapabilityExecutorPort, CapabilityExecuteInput } from "@/coagentica/intelligence/ports/capability-executor-port";
 import type { DecisionStorePort } from "@/coagentica/intelligence/ports/decision-store-port";
+import type { LearningPort } from "@/coagentica/intelligence/ports/learning-port";
 import type { PlanningPort } from "@/coagentica/intelligence/ports/planning-port";
 import type { PolicyGatePort } from "@/coagentica/intelligence/ports/policy-gate-port";
 import type { TenantOperationalContextPort } from "@/coagentica/intelligence/ports/tenant-operational-context-port";
@@ -84,6 +85,7 @@ function makeDeps(overrides?: Partial<IntelligenceRuntimeDeps>): {
     loadOperationalContext: ReturnType<typeof vi.fn>;
   };
   planner: PlanningPort & { plan: ReturnType<typeof vi.fn> };
+  learning: LearningPort & { observe: ReturnType<typeof vi.fn> };
   executor: CapabilityExecutorPort & { execute: ReturnType<typeof vi.fn> };
   store: DecisionStorePort & { saveDecision: ReturnType<typeof vi.fn> };
   hashValue: ReturnType<typeof vi.fn>;
@@ -116,6 +118,7 @@ function makeDeps(overrides?: Partial<IntelligenceRuntimeDeps>): {
       metadata: { version: "v0.9" },
     })),
   };
+  const learning = { observe: vi.fn(async () => undefined) };
   const executor = {
     execute: vi.fn(
       async ({ invocation }: CapabilityExecuteInput): Promise<CapabilityInvocation> => ({
@@ -133,13 +136,14 @@ function makeDeps(overrides?: Partial<IntelligenceRuntimeDeps>): {
     policyGate,
     operationalContext,
     planner,
+    learning,
     executor,
     store,
     hashValue,
     now,
     ...overrides,
   };
-  return { deps, policyGate, operationalContext, planner, executor, store, hashValue };
+  return { deps, policyGate, operationalContext, planner, learning, executor, store, hashValue };
 }
 
 describe("coagentica/intelligence/runtime", () => {

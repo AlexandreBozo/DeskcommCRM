@@ -87,6 +87,7 @@ describe("system native capabilities", () => {
       architecture: "coagentica",
       intelligenceRuntime: "v0.5",
       planning: "v0.9",
+      learning: "v0.11",
       agentRuntime: {
         version: "v0.10",
         mode: "bounded",

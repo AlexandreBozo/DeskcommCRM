@@ -44,6 +44,7 @@ function createRuntimeInfo(
         capabilityRegistry: "v0.6",
         planning: "v0.9",
         agentRuntime: agentRuntimeStatus,
+        learning: "v0.11",
         modelGateway: {
           version: "v0.8",
           available: gatewayStatus.available,
