@@ -5,3 +5,4 @@ export * from "./capability-executor-port";
 export * from "./capability-handler-port";
 export * from "./model-gateway-port";
 export * from "./planning-port";
+export * from "./agent-runtime-port";

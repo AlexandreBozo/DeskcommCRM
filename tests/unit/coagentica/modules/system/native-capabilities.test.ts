@@ -87,6 +87,16 @@ describe("system native capabilities", () => {
       architecture: "coagentica",
       intelligenceRuntime: "v0.5",
       planning: "v0.9",
+      agentRuntime: {
+        version: "v0.10",
+        mode: "bounded",
+        budget: {
+          maxPlanSteps: 1,
+          maxCapabilityInvocations: 1,
+          maxModelCalls: 0,
+          autonomous: false,
+        },
+      },
       modelGateway: { version: "v0.8", available: false, profiles: [] },
     });
   });

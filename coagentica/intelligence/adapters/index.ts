@@ -7,3 +7,4 @@ export { createHermesAdapter, isHermesAvailable, requireHermesAdapter, toOrchest
 export { createTenantOperationalContextBridge } from "./tenant-operational-context-bridge";
 export { createNativeExecutor, defineNativeCapability } from "./native-executor";
 export { createDirectPlanner } from "./direct-planner";
+export { createBoundedAgentRuntime } from "./bounded-agent-runtime";

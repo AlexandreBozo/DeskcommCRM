@@ -2,6 +2,7 @@ import type { CapabilityInvocation } from "@/coagentica/intelligence/contracts";
 import type { CapabilityExecuteInput } from "@/coagentica/intelligence/ports/capability-executor-port";
 import type { NativeCapabilityHandler } from "@/coagentica/intelligence/ports/capability-handler-port";
 import type { ModelGatewayPort } from "@/coagentica/intelligence/ports/model-gateway-port";
+import type { AgentRuntimeStatus } from "@/coagentica/intelligence/contracts/agent-runtime";
 
 function completed(
   input: CapabilityExecuteInput,
@@ -15,7 +16,19 @@ function completed(
   };
 }
 
-function createRuntimeInfo(modelGateway?: ModelGatewayPort): NativeCapabilityHandler {
+function createRuntimeInfo(
+  modelGateway?: ModelGatewayPort,
+  agentRuntimeStatus: AgentRuntimeStatus = {
+    version: "v0.10",
+    mode: "bounded",
+    budget: {
+      maxPlanSteps: 1,
+      maxCapabilityInvocations: 1,
+      maxModelCalls: 0,
+      autonomous: false,
+    },
+  },
+): NativeCapabilityHandler {
   return {
     capability: "system.runtime.info",
     async execute(input) {
@@ -30,6 +43,7 @@ function createRuntimeInfo(modelGateway?: ModelGatewayPort): NativeCapabilityHan
         intelligenceRuntime: "v0.5",
         capabilityRegistry: "v0.6",
         planning: "v0.9",
+        agentRuntime: agentRuntimeStatus,
         modelGateway: {
           version: "v0.8",
           available: gatewayStatus.available,
@@ -87,10 +101,15 @@ const capabilityList: NativeCapabilityHandler = {
 
 export interface SystemNativeCapabilitiesOptions {
   readonly modelGateway?: ModelGatewayPort;
+  readonly agentRuntimeStatus?: AgentRuntimeStatus;
 }
 
 export function createSystemNativeCapabilities(
   options: SystemNativeCapabilitiesOptions = {},
 ): readonly NativeCapabilityHandler[] {
-  return [createRuntimeInfo(options.modelGateway), contextSummary, capabilityList];
+  return [
+    createRuntimeInfo(options.modelGateway, options.agentRuntimeStatus),
+    contextSummary,
+    capabilityList,
+  ];
 }
