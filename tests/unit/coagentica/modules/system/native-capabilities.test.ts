@@ -86,6 +86,7 @@ describe("system native capabilities", () => {
     expect(result.output).toMatchObject({
       architecture: "coagentica",
       intelligenceRuntime: "v0.5",
+      planning: "v0.9",
       modelGateway: { version: "v0.8", available: false, profiles: [] },
     });
   });

@@ -4,8 +4,10 @@ import type {
   IntelligenceRequest,
   PolicyConstraint,
 } from "./contracts";
+import { validateExecutionPlan, type ExecutionPlan } from "./contracts/planning";
 import type { CapabilityExecutorPort } from "./ports/capability-executor-port";
 import type { DecisionStorePort } from "./ports/decision-store-port";
+import type { PlanningPort } from "./ports/planning-port";
 import type { PolicyGatePort, PolicyGateResult } from "./ports/policy-gate-port";
 import type {
   TenantOperationalContextPort,
@@ -24,8 +26,10 @@ import type {
  * 4. falha do gate (throw) ou decisão desconhecida = defer;
  * 5. allow SEM seleção autorizada = pula a leitura de contexto;
  * 6. allow COM seleção = carrega contexto; falha de carga = defer;
- * 7. executa via porta de executor; falha do executor = escalate;
- * 8. persiste TODO DecisionRecord resultante via porta de store.
+ * 7. persiste autorização write-ahead antes de planejamento/execução;
+ * 8. planeja via PlanningPort e revalida tenant/actor/capability/input;
+ * 9. executa via porta de executor; falha do executor = escalate;
+ * 10. persiste TODO DecisionRecord resultante via porta de store.
  *
  * Este módulo NÃO importa adapters, tenant-runtime, operations-kernel,
  * Deskcomm, Supabase ou SDKs de IA. Hash e relógio são injetados.
@@ -34,6 +38,7 @@ import type {
 export interface IntelligenceRuntimeDeps {
   readonly policyGate: PolicyGatePort;
   readonly operationalContext: TenantOperationalContextPort;
+  readonly planner: PlanningPort;
   readonly executor: CapabilityExecutorPort;
   readonly store: DecisionStorePort;
   readonly hashValue: (value: unknown) => string;
@@ -179,15 +184,21 @@ function assertOperationalContextBoundary(
 
 function buildPendingInvocation(
   request: IntelligenceRequest,
-  startedAt: string
+  startedAt: string,
+  plan: ExecutionPlan
 ): CapabilityInvocation {
+  const step = plan.steps[0]!;
   return {
     invocationId: `${request.requestId}-invocation`,
-    capability: request.capability,
-    input: request.input as Record<string, unknown>,
+    capability: step.capability,
+    input: step.input,
     status: "pending",
     startedAt,
-    metadata: {},
+    metadata: {
+      planId: plan.planId,
+      stepId: step.stepId,
+      planningStrategy: plan.strategy,
+    },
     actorContext: request.actorContext,
   };
 }
@@ -315,8 +326,36 @@ export async function runIntelligence(
   });
   await persistDecision(deps, authorization, "authorization");
 
-  // 5. Executa via porta — falha = escalate.
-  const invocation = buildPendingInvocation(request, timestamp);
+  // 5. Planejamento ocorre depois da autorização durável. Nesta fase (v0.9),
+  // o plano precisa ser direct/1-step e exatamente equivalente ao request.
+  let plan: ExecutionPlan;
+  try {
+    plan = await deps.planner.plan({ request, context });
+    const planErrors = validateExecutionPlan(plan, request);
+    const step = plan.steps[0];
+    if (
+      planErrors.length > 0 ||
+      step === undefined ||
+      deps.hashValue(step.input) !== inputHash
+    ) {
+      throw new Error("plano inválido");
+    }
+  } catch {
+    const decision = buildDecisionRecord({
+      request,
+      decision: "defer",
+      reason: "falha ao planejar execução — defer por falha fechada",
+      inputHash,
+      policyDecision: constraint,
+      timestamp,
+      metadata: { phase: "planning" },
+    });
+    const persisted = await persistDecision(deps, decision, "outcome");
+    return { decision: persisted, invocation: null, context };
+  }
+
+  // 6. Executa via porta — falha = escalate.
+  const invocation = buildPendingInvocation(request, timestamp, plan);
   let executed: CapabilityInvocation;
   try {
     executed = await deps.executor.execute({ request, invocation, context });
@@ -329,6 +368,11 @@ export async function runIntelligence(
       inputHash,
       policyDecision: constraint,
       timestamp,
+      metadata: {
+        planId: plan.planId,
+        stepId: plan.steps[0]!.stepId,
+        planningStrategy: plan.strategy,
+      },
     });
     const persisted = await persistDecision(deps, decision, "outcome", invocation);
     return { decision: persisted, invocation, context };
@@ -345,6 +389,11 @@ export async function runIntelligence(
       }),
       policyDecision: constraint,
       timestamp,
+      metadata: {
+        planId: plan.planId,
+        stepId: plan.steps[0]!.stepId,
+        planningStrategy: plan.strategy,
+      },
     });
     const persisted = await persistDecision(deps, decision, "outcome", executed);
     return { decision: persisted, invocation: executed, context };
@@ -360,6 +409,11 @@ export async function runIntelligence(
     }),
     policyDecision: constraint,
     timestamp,
+    metadata: {
+      planId: plan.planId,
+      stepId: plan.steps[0]!.stepId,
+      planningStrategy: plan.strategy,
+    },
   });
   const persisted = await persistDecision(deps, decision, "outcome", executed);
   return { decision: persisted, invocation: executed, context };

@@ -6,3 +6,4 @@ export type { HermesAdapterConfig, HermesAdapter } from "./hermes";
 export { createHermesAdapter, isHermesAvailable, requireHermesAdapter, toOrchestratorPort } from "./hermes";
 export { createTenantOperationalContextBridge } from "./tenant-operational-context-bridge";
 export { createNativeExecutor, defineNativeCapability } from "./native-executor";
+export { createDirectPlanner } from "./direct-planner";

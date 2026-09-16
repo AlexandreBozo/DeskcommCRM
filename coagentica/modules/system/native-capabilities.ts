@@ -29,6 +29,7 @@ function createRuntimeInfo(modelGateway?: ModelGatewayPort): NativeCapabilityHan
         operationalContextBridge: "v0.4",
         intelligenceRuntime: "v0.5",
         capabilityRegistry: "v0.6",
+        planning: "v0.9",
         modelGateway: {
           version: "v0.8",
           available: gatewayStatus.available,

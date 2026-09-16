@@ -7,6 +7,7 @@ import {
   type IntelligenceRuntimeResult,
 } from "@/coagentica/intelligence/runtime";
 import { createNativeExecutor } from "@/coagentica/intelligence/adapters/native-executor";
+import { createDirectPlanner } from "@/coagentica/intelligence/adapters/direct-planner";
 import { createDeskcommModelGateway } from "@/coagentica/intelligence/adapters/deskcomm-model-gateway";
 import { createTenantOperationalContextBridge } from "@/coagentica/intelligence/adapters/tenant-operational-context-bridge";
 import { createDefaultIntelligencePolicyGate } from "@/coagentica/intelligence/adapters/default-policy-gate";
@@ -54,6 +55,7 @@ export function createCoagenticaSystemRuntime(
   const policyGate = createDefaultIntelligencePolicyGate();
   const store = createDeskcommDecisionStore(client);
   const modelGateway = createDeskcommModelGateway();
+  const planner = createDirectPlanner();
   const handlers = createSystemNativeCapabilities({ modelGateway });
   const executor = createNativeExecutor(handlers);
 
@@ -63,6 +65,7 @@ export function createCoagenticaSystemRuntime(
       return runIntelligence(request, {
         policyGate,
         operationalContext,
+        planner,
         executor,
         store,
         hashValue,

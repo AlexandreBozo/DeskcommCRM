@@ -10,6 +10,7 @@ import {
 } from "@/coagentica/intelligence/contracts";
 import type { CapabilityExecutorPort, CapabilityExecuteInput } from "@/coagentica/intelligence/ports/capability-executor-port";
 import type { DecisionStorePort } from "@/coagentica/intelligence/ports/decision-store-port";
+import type { PlanningPort } from "@/coagentica/intelligence/ports/planning-port";
 import type { PolicyGatePort } from "@/coagentica/intelligence/ports/policy-gate-port";
 import type { TenantOperationalContextPort } from "@/coagentica/intelligence/ports/tenant-operational-context-port";
 import type { CapabilityInvocation } from "@/coagentica/intelligence/contracts";
@@ -82,6 +83,7 @@ function makeDeps(overrides?: Partial<IntelligenceRuntimeDeps>): {
   operationalContext: TenantOperationalContextPort & {
     loadOperationalContext: ReturnType<typeof vi.fn>;
   };
+  planner: PlanningPort & { plan: ReturnType<typeof vi.fn> };
   executor: CapabilityExecutorPort & { execute: ReturnType<typeof vi.fn> };
   store: DecisionStorePort & { saveDecision: ReturnType<typeof vi.fn> };
   hashValue: ReturnType<typeof vi.fn>;
@@ -95,6 +97,24 @@ function makeDeps(overrides?: Partial<IntelligenceRuntimeDeps>): {
   };
   const operationalContext = {
     loadOperationalContext: vi.fn(async () => emptyView()),
+  };
+  const planner = {
+    plan: vi.fn(async ({ request }: Parameters<PlanningPort["plan"]>[0]) => ({
+      planId: `${request.requestId}-plan`,
+      requestId: request.requestId,
+      tenantId: request.tenantContext.tenantId,
+      actorId: request.actorContext.actorId,
+      strategy: "direct" as const,
+      steps: [
+        {
+          stepId: `${request.requestId}-step-1`,
+          capability: request.capability,
+          input: request.input as Record<string, unknown>,
+          metadata: {},
+        },
+      ],
+      metadata: { version: "v0.9" },
+    })),
   };
   const executor = {
     execute: vi.fn(
@@ -112,13 +132,14 @@ function makeDeps(overrides?: Partial<IntelligenceRuntimeDeps>): {
   const deps: IntelligenceRuntimeDeps = {
     policyGate,
     operationalContext,
+    planner,
     executor,
     store,
     hashValue,
     now,
     ...overrides,
   };
-  return { deps, policyGate, operationalContext, executor, store, hashValue };
+  return { deps, policyGate, operationalContext, planner, executor, store, hashValue };
 }
 
 describe("coagentica/intelligence/runtime", () => {
@@ -418,5 +439,96 @@ describe("coagentica/intelligence/runtime", () => {
     expect(policyGate.authorize).not.toHaveBeenCalled();
     expect(executor.execute).not.toHaveBeenCalled();
     expect(store.saveDecision).toHaveBeenCalledTimes(1);
+  });
+
+  it("persiste autorização antes do planning e propaga identidade do plano", async () => {
+    const { deps, planner, executor, store } = makeDeps();
+    const result = await runIntelligence(
+      makeRequest({ requestId: "req-plan" }),
+      deps
+    );
+
+    expect(planner.plan).toHaveBeenCalledTimes(1);
+    expect(store.saveDecision).toHaveBeenCalledTimes(2);
+    const authorizationOrder = store.saveDecision.mock.invocationCallOrder[0]!;
+    const planningOrder = planner.plan.mock.invocationCallOrder[0]!;
+    const executionOrder = executor.execute.mock.invocationCallOrder[0]!;
+    expect(authorizationOrder).toBeLessThan(planningOrder);
+    expect(planningOrder).toBeLessThan(executionOrder);
+    expect(executor.execute.mock.calls[0]?.[0].invocation.metadata).toMatchObject({
+      planId: "req-plan-plan",
+      stepId: "req-plan-step-1",
+      planningStrategy: "direct",
+    });
+    expect(result.decision.metadata).toMatchObject({
+      planId: "req-plan-plan",
+      stepId: "req-plan-step-1",
+      planningStrategy: "direct",
+    });
+  });
+
+  it("adía por falha fechada quando o planner lança erro", async () => {
+    const { deps, planner, executor, store } = makeDeps();
+    planner.plan.mockRejectedValueOnce(new Error("planner indisponível"));
+
+    const result = await runIntelligence(makeRequest({ requestId: "req-plan-fail" }), deps);
+
+    expect(result.decision.decision).toBe("defer");
+    expect(result.decision.reason).toContain("planejar execução");
+    expect(result.decision.metadata).toMatchObject({ phase: "planning" });
+    expect(executor.execute).not.toHaveBeenCalled();
+    expect(store.saveDecision).toHaveBeenCalledTimes(2);
+  });
+
+  it("adía quando o plano tenta trocar a capability autorizada", async () => {
+    const { deps, planner, executor } = makeDeps();
+    const request = makeRequest({ requestId: "req-plan-cap" });
+    planner.plan.mockResolvedValueOnce({
+      planId: "req-plan-cap-plan",
+      requestId: request.requestId,
+      tenantId: request.tenantContext.tenantId,
+      actorId: request.actorContext.actorId,
+      strategy: "direct",
+      steps: [
+        {
+          stepId: "req-plan-cap-step-1",
+          capability: "outra.capability",
+          input: request.input as Record<string, unknown>,
+          metadata: {},
+        },
+      ],
+      metadata: { version: "v0.9" },
+    });
+
+    const result = await runIntelligence(request, deps);
+
+    expect(result.decision.decision).toBe("defer");
+    expect(executor.execute).not.toHaveBeenCalled();
+  });
+
+  it("adía quando o planner altera o input autorizado", async () => {
+    const { deps, planner, executor } = makeDeps();
+    const request = makeRequest({ requestId: "req-plan-input" });
+    planner.plan.mockResolvedValueOnce({
+      planId: "req-plan-input-plan",
+      requestId: request.requestId,
+      tenantId: request.tenantContext.tenantId,
+      actorId: request.actorContext.actorId,
+      strategy: "direct",
+      steps: [
+        {
+          stepId: "req-plan-input-step-1",
+          capability: request.capability,
+          input: { adulterado: true },
+          metadata: {},
+        },
+      ],
+      metadata: { version: "v0.9" },
+    });
+
+    const result = await runIntelligence(request, deps);
+
+    expect(result.decision.decision).toBe("defer");
+    expect(executor.execute).not.toHaveBeenCalled();
   });
 });

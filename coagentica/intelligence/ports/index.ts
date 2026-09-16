@@ -4,3 +4,4 @@ export * from "./decision-store-port";
 export * from "./capability-executor-port";
 export * from "./capability-handler-port";
 export * from "./model-gateway-port";
+export * from "./planning-port";
