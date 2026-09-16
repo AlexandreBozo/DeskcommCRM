@@ -6,7 +6,11 @@ import { createModelGenerationRequest } from "@/coagentica/intelligence/contract
 vi.mock("@/lib/ai/gateway", () => ({
   DEFAULT_BOT_MODEL: "internal/balanced",
   DEFAULT_CLASSIFIER_MODEL: "internal/fast",
-  isAiGatewayConfigured: () => false,
+  gatewayConfig: vi.fn(() => null),
+  gatewayHeaders: vi.fn(({ organizationId }: { organizationId: string }) => ({
+    "X-AI-Gateway-Tenant-Id": organizationId,
+    "X-AI-Gateway-Zero-Retention": "1",
+  })),
   resolveLanguageModel: vi.fn(() => null),
 }));
 
@@ -19,7 +23,7 @@ import {
   ModelGatewayBoundaryError,
 } from "@/coagentica/intelligence/adapters/deskcomm-model-gateway";
 import { generateText } from "ai";
-import { resolveLanguageModel } from "@/lib/ai/gateway";
+import { gatewayConfig, gatewayHeaders, resolveLanguageModel } from "@/lib/ai/gateway";
 
 function tenant(id: string) {
   return createTenantContext({
@@ -53,7 +57,15 @@ function request(tenantId = "tenant-1", actorTenantId = tenantId) {
 
 describe("Deskcomm Model Gateway adapter", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    vi.mocked(resolveLanguageModel).mockReset().mockReturnValue(null);
+    vi.mocked(gatewayConfig).mockReset().mockReturnValue(null);
+    vi.mocked(gatewayHeaders)
+      .mockReset()
+      .mockImplementation(({ organizationId }) => ({
+        "X-AI-Gateway-Tenant-Id": organizationId,
+        "X-AI-Gateway-Zero-Retention": "1",
+      }));
+    vi.mocked(generateText).mockReset();
   });
 
   it("falha fechado como unavailable quando não há rota de modelo configurada", async () => {
@@ -68,7 +80,7 @@ describe("Deskcomm Model Gateway adapter", () => {
       usage: {},
       metadata: { profile: "balanced" },
     });
-    expect(resolveLanguageModel).toHaveBeenCalledTimes(1);
+    expect(resolveLanguageModel).toHaveBeenCalledWith("internal/balanced");
     expect(generateText).not.toHaveBeenCalled();
   });
 
@@ -91,6 +103,30 @@ describe("Deskcomm Model Gateway adapter", () => {
     expect(serialized).not.toContain("internal/fast");
     expect(serialized).not.toContain("provider");
     expect(serialized).not.toContain("modelId");
+  });
+
+  it("propaga tenant e zero-retention apenas quando usa o AI Gateway", async () => {
+    vi.mocked(resolveLanguageModel).mockReturnValue({} as never);
+    vi.mocked(gatewayConfig).mockReturnValue({ apiKey: "configured" });
+    vi.mocked(generateText).mockResolvedValue({
+      text: "ok",
+      finishReason: "stop",
+      usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
+    } as never);
+
+    const gateway = createDeskcommModelGateway();
+    const result = await gateway.generate(request());
+
+    expect(gatewayHeaders).toHaveBeenCalledWith({ organizationId: "tenant-1" });
+    expect(generateText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        headers: {
+          "X-AI-Gateway-Tenant-Id": "tenant-1",
+          "X-AI-Gateway-Zero-Retention": "1",
+        },
+      }),
+    );
+    expect(result).toMatchObject({ status: "completed", text: "ok" });
   });
 
   it("não devolve erro bruto do provider pelo contrato canônico", async () => {

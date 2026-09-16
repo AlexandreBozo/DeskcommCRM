@@ -3,7 +3,8 @@ import { generateText } from "ai";
 import {
   DEFAULT_BOT_MODEL,
   DEFAULT_CLASSIFIER_MODEL,
-  isAiGatewayConfigured,
+  gatewayConfig,
+  gatewayHeaders,
   resolveLanguageModel,
   type ModelId,
 } from "@/lib/ai/gateway";
@@ -71,10 +72,12 @@ export function createDeskcommModelGateway(
 
   return {
     async status() {
-      const available = isAiGatewayConfigured();
+      const profiles = (["fast", "balanced", "reasoning"] as const).filter(
+        (profile) => resolveLanguageModel(modelByProfile[profile]) !== null,
+      );
       return {
-        available,
-        profiles: available ? (["fast", "balanced", "reasoning"] as const) : [],
+        available: profiles.length > 0,
+        profiles,
       };
     },
 
@@ -92,6 +95,7 @@ export function createDeskcommModelGateway(
       }
 
       try {
+        const viaGateway = gatewayConfig() !== null;
         const result = await generateText({
           model,
           prompt: request.prompt,
@@ -99,6 +103,11 @@ export function createDeskcommModelGateway(
           ...(request.temperature !== undefined && { temperature: request.temperature }),
           ...(request.maxOutputTokens !== undefined && {
             maxOutputTokens: request.maxOutputTokens,
+          }),
+          ...(viaGateway && {
+            headers: gatewayHeaders({
+              organizationId: request.tenantContext.organizationId,
+            }),
           }),
         });
 
