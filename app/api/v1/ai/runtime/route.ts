@@ -110,6 +110,16 @@ export async function POST(req: NextRequest): Promise<Response> {
     );
   } catch (error) {
     if (error instanceof DecisionPersistenceError) {
+      const persistenceMessage =
+        error.originalError instanceof Error
+          ? error.originalError.message
+          : String(error.originalError);
+      console.error("[coagentica.runtime] decision persistence failed", {
+        requestId,
+        capability: parsed.data.capability,
+        phase: error.phase,
+        message: persistenceMessage,
+      });
       return fail(
         "decision_persistence_failed",
         "A decisão não pôde ser registrada com segurança.",
