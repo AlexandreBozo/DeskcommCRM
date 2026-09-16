@@ -83,6 +83,35 @@ describe("system native capabilities", () => {
     const handler = createSystemNativeCapabilities().find((x) => x.capability === "system.runtime.info")!;
     const result = await handler.execute(input(handler.capability, null));
     expect(result.status).toBe("completed");
-    expect(result.output).toMatchObject({ architecture: "coagentica", intelligenceRuntime: "v0.5" });
+    expect(result.output).toMatchObject({
+      architecture: "coagentica",
+      intelligenceRuntime: "v0.5",
+      modelGateway: { version: "v0.8", available: false, profiles: [] },
+    });
+  });
+
+  it("runtime info expõe apenas status canônico do Model Gateway", async () => {
+    const modelGateway = {
+      async status() {
+        return { available: true, profiles: ["fast", "balanced", "reasoning"] as const };
+      },
+      async generate() {
+        throw new Error("não deve ser chamado por runtime info");
+      },
+    };
+    const handler = createSystemNativeCapabilities({ modelGateway }).find(
+      (x) => x.capability === "system.runtime.info",
+    )!;
+    const result = await handler.execute(input(handler.capability, null));
+    const serialized = JSON.stringify(result.output);
+
+    expect(result.output).toMatchObject({
+      modelGateway: {
+        version: "v0.8",
+        available: true,
+        profiles: ["fast", "balanced", "reasoning"],
+      },
+    });
+    expect(serialized).not.toMatch(/anthropic|openai|google|provider|modelId/);
   });
 });

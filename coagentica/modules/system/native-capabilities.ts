@@ -1,6 +1,7 @@
 import type { CapabilityInvocation } from "@/coagentica/intelligence/contracts";
 import type { CapabilityExecuteInput } from "@/coagentica/intelligence/ports/capability-executor-port";
 import type { NativeCapabilityHandler } from "@/coagentica/intelligence/ports/capability-handler-port";
+import type { ModelGatewayPort } from "@/coagentica/intelligence/ports/model-gateway-port";
 
 function completed(
   input: CapabilityExecuteInput,
@@ -14,21 +15,31 @@ function completed(
   };
 }
 
-const runtimeInfo: NativeCapabilityHandler = {
-  capability: "system.runtime.info",
-  async execute(input) {
-    return completed(input, {
-      architecture: "coagentica",
-      foundation: "v0.1",
-      tenantOperationsCore: "v0.3",
-      operationalContextBridge: "v0.4",
-      intelligenceRuntime: "v0.5",
-      capabilityRegistry: "v0.6",
-      tenantId: input.request.tenantContext.tenantId,
-      contextLoaded: input.context !== null,
-    });
-  },
-};
+function createRuntimeInfo(modelGateway?: ModelGatewayPort): NativeCapabilityHandler {
+  return {
+    capability: "system.runtime.info",
+    async execute(input) {
+      const gatewayStatus = modelGateway
+        ? await modelGateway.status()
+        : { available: false, profiles: [] as const };
+      return completed(input, {
+        architecture: "coagentica",
+        foundation: "v0.1",
+        tenantOperationsCore: "v0.3",
+        operationalContextBridge: "v0.4",
+        intelligenceRuntime: "v0.5",
+        capabilityRegistry: "v0.6",
+        modelGateway: {
+          version: "v0.8",
+          available: gatewayStatus.available,
+          profiles: gatewayStatus.profiles,
+        },
+        tenantId: input.request.tenantContext.tenantId,
+        contextLoaded: input.context !== null,
+      });
+    },
+  };
+}
 
 const contextSummary: NativeCapabilityHandler = {
   capability: "tenant.context.summary",
@@ -73,6 +84,12 @@ const capabilityList: NativeCapabilityHandler = {
   },
 };
 
-export function createSystemNativeCapabilities(): readonly NativeCapabilityHandler[] {
-  return [runtimeInfo, contextSummary, capabilityList];
+export interface SystemNativeCapabilitiesOptions {
+  readonly modelGateway?: ModelGatewayPort;
+}
+
+export function createSystemNativeCapabilities(
+  options: SystemNativeCapabilitiesOptions = {},
+): readonly NativeCapabilityHandler[] {
+  return [createRuntimeInfo(options.modelGateway), contextSummary, capabilityList];
 }
