@@ -11,6 +11,7 @@ import {
 import type { CapabilityExecutorPort, CapabilityExecuteInput } from "@/coagentica/intelligence/ports/capability-executor-port";
 import type { DecisionStorePort } from "@/coagentica/intelligence/ports/decision-store-port";
 import type { LearningPort } from "@/coagentica/intelligence/ports/learning-port";
+import type { MemoryPort } from "@/coagentica/intelligence/ports/memory-port";
 import type { PlanningPort } from "@/coagentica/intelligence/ports/planning-port";
 import type { PolicyGatePort } from "@/coagentica/intelligence/ports/policy-gate-port";
 import type { TenantOperationalContextPort } from "@/coagentica/intelligence/ports/tenant-operational-context-port";
@@ -85,6 +86,7 @@ function makeDeps(overrides?: Partial<IntelligenceRuntimeDeps>): {
     loadOperationalContext: ReturnType<typeof vi.fn>;
   };
   planner: PlanningPort & { plan: ReturnType<typeof vi.fn> };
+  memory: MemoryPort & { prepare: ReturnType<typeof vi.fn> };
   learning: LearningPort & { observe: ReturnType<typeof vi.fn> };
   executor: CapabilityExecutorPort & { execute: ReturnType<typeof vi.fn> };
   store: DecisionStorePort & { saveDecision: ReturnType<typeof vi.fn> };
@@ -118,6 +120,22 @@ function makeDeps(overrides?: Partial<IntelligenceRuntimeDeps>): {
       metadata: { version: "v0.9" },
     })),
   };
+  const memoryStatus = {
+    version: "v0.12" as const,
+    mode: "read-only" as const,
+    writesEnabled: false as const,
+    budget: { maxEntries: 20 },
+  };
+  const memory = {
+    budget: memoryStatus.budget,
+    status: memoryStatus,
+    prepare: vi.fn(async ({ context }: Parameters<MemoryPort["prepare"]>[0]) => ({
+      context,
+      selectedCount: context.memoryEntries.length,
+      truncated: context.truncated.memoryEntries,
+      status: memoryStatus,
+    })),
+  };
   const learning = { observe: vi.fn(async () => undefined) };
   const executor = {
     execute: vi.fn(
@@ -136,6 +154,7 @@ function makeDeps(overrides?: Partial<IntelligenceRuntimeDeps>): {
     policyGate,
     operationalContext,
     planner,
+    memory,
     learning,
     executor,
     store,
@@ -143,7 +162,7 @@ function makeDeps(overrides?: Partial<IntelligenceRuntimeDeps>): {
     now,
     ...overrides,
   };
-  return { deps, policyGate, operationalContext, planner, learning, executor, store, hashValue };
+  return { deps, policyGate, operationalContext, planner, memory, learning, executor, store, hashValue };
 }
 
 describe("coagentica/intelligence/runtime", () => {

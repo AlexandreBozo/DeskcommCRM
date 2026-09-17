@@ -9,10 +9,12 @@ import {
 import { createNativeExecutor } from "@/coagentica/intelligence/adapters/native-executor";
 import { createDirectPlanner } from "@/coagentica/intelligence/adapters/direct-planner";
 import { createBoundedAgentRuntime } from "@/coagentica/intelligence/adapters/bounded-agent-runtime";
+import { createReadOnlyMemory } from "@/coagentica/intelligence/adapters/read-only-memory";
 import {
   createAgentExecutionBudget,
   createAgentRuntimeStatus,
 } from "@/coagentica/intelligence/contracts/agent-runtime";
+import { createMemoryBudget } from "@/coagentica/intelligence/contracts/memory";
 import { createDeskcommModelGateway } from "@/coagentica/intelligence/adapters/deskcomm-model-gateway";
 import { createTenantOperationalContextBridge } from "@/coagentica/intelligence/adapters/tenant-operational-context-bridge";
 import { createDefaultIntelligencePolicyGate } from "@/coagentica/intelligence/adapters/default-policy-gate";
@@ -63,11 +65,13 @@ export function createCoagenticaSystemRuntime(
   const learning = createDeskcommLearningObserver(client);
   const modelGateway = createDeskcommModelGateway();
   const planner = createDirectPlanner();
+  const memory = createReadOnlyMemory(createMemoryBudget(20));
   const agentBudget = createAgentExecutionBudget();
   const agentRuntimeStatus = createAgentRuntimeStatus(agentBudget);
   const handlers = createSystemNativeCapabilities({
     modelGateway,
     agentRuntimeStatus,
+    memoryStatus: memory.status,
   });
   const nativeExecutor = createNativeExecutor(handlers);
   const executor = createBoundedAgentRuntime(nativeExecutor, agentBudget);
@@ -79,6 +83,7 @@ export function createCoagenticaSystemRuntime(
         policyGate,
         operationalContext,
         planner,
+        memory,
         learning,
         executor,
         store,

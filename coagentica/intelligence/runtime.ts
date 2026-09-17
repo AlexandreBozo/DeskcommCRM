@@ -9,6 +9,7 @@ import { validateExecutionPlan, type ExecutionPlan } from "./contracts/planning"
 import type { CapabilityExecutorPort } from "./ports/capability-executor-port";
 import type { DecisionStorePort } from "./ports/decision-store-port";
 import type { LearningPort } from "./ports/learning-port";
+import type { MemoryPort } from "./ports/memory-port";
 import type { PlanningPort } from "./ports/planning-port";
 import type { PolicyGatePort, PolicyGateResult } from "./ports/policy-gate-port";
 import type {
@@ -41,6 +42,7 @@ export interface IntelligenceRuntimeDeps {
   readonly policyGate: PolicyGatePort;
   readonly operationalContext: TenantOperationalContextPort;
   readonly planner: PlanningPort;
+  readonly memory: MemoryPort;
   readonly learning: LearningPort;
   readonly executor: CapabilityExecutorPort;
   readonly store: DecisionStorePort;
@@ -337,7 +339,32 @@ export async function runIntelligence(
     }
   }
 
-  // 4. Write-ahead: autorização precisa estar durável antes de qualquer executor com side effect.
+  // 4. Memory v0.12: projeta somente working memory ativa, limitada e tenant-bound.
+  // Falha nesta preparação impede planning/execução por fail-closed.
+  let memorySelectedCount = 0;
+  let memoryTruncated = false;
+  if (context !== null) {
+    try {
+      const preparedMemory = await deps.memory.prepare({ tenantId, context });
+      context = preparedMemory.context;
+      memorySelectedCount = preparedMemory.selectedCount;
+      memoryTruncated = preparedMemory.truncated;
+    } catch {
+      const decision = buildDecisionRecord({
+        request,
+        decision: "defer",
+        reason: "falha ao preparar memória operacional — defer por falha fechada",
+        inputHash,
+        policyDecision: constraint,
+        timestamp,
+        metadata: { phase: "memory", memoryVersion: "v0.12" },
+      });
+      const persisted = await persistOutcome(deps, request, decision);
+      return { decision: persisted, invocation: null, context };
+    }
+  }
+
+  // 5. Write-ahead: autorização precisa estar durável antes de qualquer executor com side effect.
   const authorization = buildDecisionRecord({
     request,
     decision: "allow",
@@ -346,11 +373,17 @@ export async function runIntelligence(
     policyDecision: constraint,
     timestamp,
     decisionId: `${request.requestId}-authorization`,
-    metadata: { phase: "authorization" },
+    metadata: {
+      phase: "authorization",
+      memoryVersion: "v0.12",
+      memoryMode: "read-only",
+      workingMemoryEntries: memorySelectedCount,
+      memoryTruncated,
+    },
   });
   await persistDecision(deps, authorization, "authorization");
 
-  // 5. Planejamento ocorre depois da autorização durável. Nesta fase (v0.9),
+  // 6. Planejamento ocorre depois da autorização durável. Nesta fase (v0.9),
   // o plano precisa ser direct/1-step e exatamente equivalente ao request.
   let plan: ExecutionPlan;
   try {
@@ -378,7 +411,7 @@ export async function runIntelligence(
     return { decision: persisted, invocation: null, context };
   }
 
-  // 6. Executa via porta — falha = escalate.
+  // 7. Executa via porta — falha = escalate.
   const invocation = buildPendingInvocation(request, timestamp, plan);
   let executed: CapabilityInvocation;
   try {

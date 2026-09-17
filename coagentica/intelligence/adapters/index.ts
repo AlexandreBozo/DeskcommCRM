@@ -8,3 +8,5 @@ export { createTenantOperationalContextBridge } from "./tenant-operational-conte
 export { createNativeExecutor, defineNativeCapability } from "./native-executor";
 export { createDirectPlanner } from "./direct-planner";
 export { createBoundedAgentRuntime } from "./bounded-agent-runtime";
+export { createReadOnlyMemory } from "./read-only-memory";
+

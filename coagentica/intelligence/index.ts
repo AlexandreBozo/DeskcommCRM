@@ -2,6 +2,7 @@ export * from "./contracts";
 export * from "./contracts/model-gateway";
 export * from "./contracts/planning";
 export * from "./contracts/agent-runtime";
+export * from "./contracts/memory";
 export * from "./contracts/learning";
 export * from "./orchestrator-port";
 export * from "./ports";

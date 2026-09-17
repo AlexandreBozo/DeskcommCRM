@@ -6,5 +6,6 @@ export * from "./capability-handler-port";
 export * from "./model-gateway-port";
 export * from "./planning-port";
 export * from "./agent-runtime-port";
+export * from "./memory-port";
 
 export * from "./learning-port";
