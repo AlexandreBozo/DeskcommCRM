@@ -72,6 +72,22 @@ describe("system native capabilities", () => {
     expect(JSON.stringify(output)).not.toContain("PII");
   });
 
+  it("goals list expõe somente a visão read-only autorizada", async () => {
+    const withGoal = {
+      ...view!,
+      goals: [
+        { goalId: "g-1", name: "Crescer", description: "Aumentar receita", status: "active", metadata: {} },
+      ],
+    } as CapabilityExecuteInput["context"];
+    const handler = createSystemNativeCapabilities().find((x) => x.capability === "tenant.goals.list")!;
+    const result = await handler.execute(input(handler.capability, withGoal));
+    expect(result.output).toMatchObject({
+      tenantId: "tenant-1",
+      goals: [{ goalId: "g-1", name: "Crescer", description: "Aumentar receita", status: "active" }],
+    });
+    expect(JSON.stringify(result.output)).not.toContain("metadata");
+  });
+
   it("capability list não expõe config ou metadata", async () => {
     const handler = createSystemNativeCapabilities().find((x) => x.capability === "tenant.capabilities.list")!;
     const result = await handler.execute(input(handler.capability, view));
@@ -85,8 +101,19 @@ describe("system native capabilities", () => {
     expect(result.status).toBe("completed");
     expect(result.output).toMatchObject({
       architecture: "coagentica",
+      runtimeRelease: "v1.0",
+      foundation: "v1.0",
       intelligenceRuntime: "v0.5",
-      planning: "v0.9",
+      planning: {
+        goalAware: "v0.14",
+        multiStep: "v0.16",
+        maxSteps: 1,
+      },
+      goals: { version: "v0.13", mode: "read-only" },
+      contextEngine: { version: "v0.15", mode: "bounded-relevance" },
+      nativeActions: { version: "v0.18", mutationsEnabled: false },
+      governance: { version: "v0.19", mode: "human-in-the-loop" },
+      channels: { version: "v0.20", normalizedInput: true },
       learning: "v0.11",
       agentRuntime: {
         version: "v0.10",

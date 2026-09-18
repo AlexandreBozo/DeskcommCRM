@@ -88,6 +88,58 @@ describe("runtime memory v0.12", () => {
           throw new Error("memory indisponível");
         }),
       },
+      contextEngine: {
+        status: () => ({
+          version: "v0.15",
+          mode: "bounded-relevance",
+          budget: {
+            maxEntities: 20,
+            maxRelationships: 30,
+            maxKnowledgeSources: 8,
+            maxMemoryEntries: 12,
+            maxGoals: 5,
+            maxCapabilities: 20,
+          },
+        }),
+        prepare: vi.fn(async ({ context }) => ({
+          context,
+          selected: {
+            entities: 0,
+            relationships: 0,
+            knowledgeSources: 0,
+            memoryEntries: 0,
+            goals: 0,
+            capabilities: 0,
+          },
+          truncated: false,
+          status: {
+            version: "v0.15",
+            mode: "bounded-relevance",
+            budget: {
+              maxEntities: 20,
+              maxRelationships: 30,
+              maxKnowledgeSources: 8,
+              maxMemoryEntries: 12,
+              maxGoals: 5,
+              maxCapabilities: 20,
+            },
+          },
+        })),
+      },
+      governance: {
+        status: () => ({ version: "v0.19" as const, mode: "human-in-the-loop" as const }),
+        assess: vi.fn(async ({ step }) => ({
+          version: "v0.19" as const,
+          decision: "allow" as const,
+          reason: "read-only permitido",
+          action: {
+            capability: step.capability,
+            sideEffect: "none" as const,
+            idempotency: "none" as const,
+            requiresApproval: false,
+          },
+        })),
+      },
       learning,
       executor,
       store,

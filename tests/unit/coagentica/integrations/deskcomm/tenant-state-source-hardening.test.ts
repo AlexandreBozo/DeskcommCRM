@@ -16,7 +16,7 @@ const pointer = (tenantId: string | null, versionId = "v-1") => ({ name: "sales"
 const version = (tenantId: string | null, id = "v-1") => ({ id, organization_id: tenantId, name: "sales", description: "S", body: "body", manifest: {}, matcher: {}, created_at: iso, forked_from_version_id: null } as SkillVersionRow);
 
 function base(overrides: Partial<DeskcommTenantStateRows> = {}): DeskcommTenantStateRows {
-  return { organization: org(), contacts: [], memoryEntries: [], knowledgeSources: [], skillPointers: [pointer("tenant-1")], skillVersions: [version("tenant-1")], ...overrides };
+  return { organization: org(), contacts: [], memoryEntries: [], goals: [], knowledgeSources: [], skillPointers: [pointer("tenant-1")], skillVersions: [version("tenant-1")], ...overrides };
 }
 
 function source(rows: DeskcommTenantStateRows) {

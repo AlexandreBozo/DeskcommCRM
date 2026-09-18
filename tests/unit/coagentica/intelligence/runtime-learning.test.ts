@@ -19,6 +19,46 @@ describe("runtime learning v0.11", () => {
       policyGate: { authorize: async () => ({ constraint: {decision: "allow" as const, reason: "ok"} }) },
       operationalContext: {loadOperationalContext: async () => ({})},
       planner: { plan: async () => ({ planId: "req-1-plan", requestId: "req-1", tenantId: "tenant-1", actorId: "actor-1", strategy: "direct" as const, steps: [{stepId: "req-1-step-1", capability: "system.runtime.info", input: {}, metadata: {}}], metadata: {} }) },
+      contextEngine: {
+        status: () => ({
+          version: "v0.15" as const,
+          mode: "bounded-relevance" as const,
+          budget: {
+            maxEntities: 20,
+            maxRelationships: 30,
+            maxKnowledgeSources: 8,
+            maxMemoryEntries: 12,
+            maxGoals: 5,
+            maxCapabilities: 20,
+          },
+        }),
+        prepare: async ({ context }: any) => ({
+          context,
+          selected: { entities: 0, relationships: 0, knowledgeSources: 0, memoryEntries: 0, goals: 0, capabilities: 0 },
+          truncated: false,
+          status: {
+            version: "v0.15" as const,
+            mode: "bounded-relevance" as const,
+            budget: {
+              maxEntities: 20,
+              maxRelationships: 30,
+              maxKnowledgeSources: 8,
+              maxMemoryEntries: 12,
+              maxGoals: 5,
+              maxCapabilities: 20,
+            },
+          },
+        }),
+      },
+      governance: {
+        status: () => ({ version: "v0.19" as const, mode: "human-in-the-loop" as const }),
+        assess: async ({ step }: any) => ({
+          version: "v0.19" as const,
+          decision: "allow" as const,
+          reason: "read-only permitido",
+          action: { capability: step.capability, sideEffect: "none" as const, idempotency: "none" as const, requiresApproval: false },
+        }),
+      },
       learning,
       executor: { execute: async ({invocation}: any) => ({...invocation, status: "completed" as const, completedAt: NOW, output: {ok: true}}) },
       store: {saveDecision}, hashValue: (v: unknown) => `h:${JSON.stringify(v)}`, now: () => NOW,

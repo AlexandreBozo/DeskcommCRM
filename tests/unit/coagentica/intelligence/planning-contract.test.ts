@@ -74,7 +74,7 @@ describe("planning contract", () => {
       expect.arrayContaining([
         "tenantId do plano diverge do request",
         "actorId do plano diverge do request",
-        "capability do plano diverge do request",
+        "capability inicial do plano diverge do request",
       ]),
     );
   });
@@ -87,7 +87,7 @@ describe("planning contract", () => {
     };
 
     expect(validateExecutionPlan(invalid, request())).toContain(
-      "planning direct exige exatamente um passo",
+      "planning single-step exige exatamente um passo",
     );
   });
 });

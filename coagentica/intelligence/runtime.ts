@@ -5,8 +5,10 @@ import type {
   PolicyConstraint,
 } from "./contracts";
 import { createLearningObservation } from "./contracts/learning";
-import { validateExecutionPlan, type ExecutionPlan } from "./contracts/planning";
+import { validateExecutionPlan, type ExecutionPlan, type ExecutionPlanStep } from "./contracts/planning";
 import type { CapabilityExecutorPort } from "./ports/capability-executor-port";
+import type { ContextEnginePort } from "./ports/context-engine-port";
+import type { GovernancePort } from "./ports/governance-port";
 import type { DecisionStorePort } from "./ports/decision-store-port";
 import type { LearningPort } from "./ports/learning-port";
 import type { MemoryPort } from "./ports/memory-port";
@@ -43,6 +45,8 @@ export interface IntelligenceRuntimeDeps {
   readonly operationalContext: TenantOperationalContextPort;
   readonly planner: PlanningPort;
   readonly memory: MemoryPort;
+  readonly contextEngine: ContextEnginePort;
+  readonly governance: GovernancePort;
   readonly learning: LearningPort;
   readonly executor: CapabilityExecutorPort;
   readonly store: DecisionStorePort;
@@ -53,6 +57,7 @@ export interface IntelligenceRuntimeDeps {
 export interface IntelligenceRuntimeResult {
   readonly decision: DecisionRecord;
   readonly invocation: CapabilityInvocation | null;
+  readonly invocations?: readonly CapabilityInvocation[];
   readonly context: TenantOperationalContextView | null;
 }
 
@@ -211,11 +216,14 @@ function assertOperationalContextBoundary(
 function buildPendingInvocation(
   request: IntelligenceRequest,
   startedAt: string,
-  plan: ExecutionPlan
+  plan: ExecutionPlan,
+  step: ExecutionPlanStep,
+  stepIndex: number
 ): CapabilityInvocation {
-  const step = plan.steps[0]!;
   return {
-    invocationId: `${request.requestId}-invocation`,
+    invocationId: plan.steps.length === 1
+      ? `${request.requestId}-invocation`
+      : `${request.requestId}-invocation-${stepIndex + 1}`,
     capability: step.capability,
     input: step.input,
     status: "pending",
@@ -224,6 +232,9 @@ function buildPendingInvocation(
       planId: plan.planId,
       stepId: step.stepId,
       planningStrategy: plan.strategy,
+      planStepIndex: stepIndex,
+      planStepCount: plan.steps.length,
+      ...step.metadata,
     },
     actorContext: request.actorContext,
   };
@@ -340,7 +351,6 @@ export async function runIntelligence(
   }
 
   // 4. Memory v0.12: projeta somente working memory ativa, limitada e tenant-bound.
-  // Falha nesta preparação impede planning/execução por fail-closed.
   let memorySelectedCount = 0;
   let memoryTruncated = false;
   if (context !== null) {
@@ -364,7 +374,36 @@ export async function runIntelligence(
     }
   }
 
-  // 5. Write-ahead: autorização precisa estar durável antes de qualquer executor com side effect.
+  // 5. Context Engine v0.15: reduz o contexto por relevância e orçamento antes do planning.
+  let contextTruncated = false;
+  let contextSelected = {
+    entities: 0,
+    relationships: 0,
+    knowledgeSources: 0,
+    memoryEntries: memorySelectedCount,
+    goals: 0,
+    capabilities: 0,
+  };
+  try {
+    const preparedContext = await deps.contextEngine.prepare({ request, context });
+    context = preparedContext.context;
+    contextTruncated = preparedContext.truncated;
+    contextSelected = preparedContext.selected;
+  } catch {
+    const decision = buildDecisionRecord({
+      request,
+      decision: "defer",
+      reason: "falha ao preparar contexto relevante — defer por falha fechada",
+      inputHash,
+      policyDecision: constraint,
+      timestamp,
+      metadata: { phase: "context-engine", contextEngineVersion: "v0.15" },
+    });
+    const persisted = await persistOutcome(deps, request, decision);
+    return { decision: persisted, invocation: null, context };
+  }
+
+  // 6. Write-ahead: autorização fica durável antes de planning/governança/executor.
   const authorization = buildDecisionRecord({
     request,
     decision: "allow",
@@ -375,25 +414,29 @@ export async function runIntelligence(
     decisionId: `${request.requestId}-authorization`,
     metadata: {
       phase: "authorization",
+      goalsVersion: "v0.13",
+      activeGoals: contextSelected.goals,
       memoryVersion: "v0.12",
       memoryMode: "read-only",
-      workingMemoryEntries: memorySelectedCount,
+      workingMemoryEntries: contextSelected.memoryEntries,
       memoryTruncated,
+      contextEngineVersion: "v0.15",
+      contextTruncated,
+      contextSelected,
     },
   });
   await persistDecision(deps, authorization, "authorization");
 
-  // 6. Planejamento ocorre depois da autorização durável. Nesta fase (v0.9),
-  // o plano precisa ser direct/1-step e exatamente equivalente ao request.
+  // 7. Planning v0.14/v0.16: goal-aware, no máximo três passos e primeiro passo equivalente ao request.
   let plan: ExecutionPlan;
   try {
     plan = await deps.planner.plan({ request, context });
     const planErrors = validateExecutionPlan(plan, request);
-    const step = plan.steps[0];
+    const firstStep = plan.steps[0];
     if (
       planErrors.length > 0 ||
-      step === undefined ||
-      deps.hashValue(step.input) !== inputHash
+      firstStep === undefined ||
+      deps.hashValue(firstStep.input) !== inputHash
     ) {
       throw new Error("plano inválido");
     }
@@ -411,67 +454,119 @@ export async function runIntelligence(
     return { decision: persisted, invocation: null, context };
   }
 
-  // 7. Executa via porta — falha = escalate.
-  const invocation = buildPendingInvocation(request, timestamp, plan);
-  let executed: CapabilityInvocation;
-  try {
-    executed = await deps.executor.execute({ request, invocation, context });
-  } catch (error) {
-    const detail = error instanceof Error ? error.message : "erro desconhecido";
-    const decision = buildDecisionRecord({
-      request,
-      decision: "escalate",
-      reason: `falha do executor — escalado por falha fechada: ${detail}`,
-      inputHash,
-      policyDecision: constraint,
-      timestamp,
-      metadata: {
-        planId: plan.planId,
-        stepId: plan.steps[0]!.stepId,
-        planningStrategy: plan.strategy,
-      },
-    });
-    const persisted = await persistOutcome(deps, request, decision, invocation);
-    return { decision: persisted, invocation, context };
+  // 8. Governance v0.19 + Agent Runtime v0.17: cada passo é avaliado antes da execução.
+  const executions: CapabilityInvocation[] = [];
+  for (const [stepIndex, step] of plan.steps.entries()) {
+    let governance;
+    try {
+      governance = await deps.governance.assess({ request, step, context });
+    } catch {
+      const decision = buildDecisionRecord({
+        request,
+        decision: "defer",
+        reason: "falha ao avaliar governança — defer por falha fechada",
+        inputHash,
+        policyDecision: constraint,
+        timestamp,
+        metadata: { phase: "governance", governanceVersion: "v0.19", stepId: step.stepId },
+      });
+      const persisted = await persistOutcome(deps, request, decision, executions.at(-1) ?? null);
+      return { decision: persisted, invocation: executions.at(-1) ?? null, invocations: executions, context };
+    }
+
+    if (governance.decision !== "allow") {
+      const approvalRequired = governance.decision === "approval_required";
+      const decision = buildDecisionRecord({
+        request,
+        decision: approvalRequired ? "defer" : "deny",
+        reason: governance.reason,
+        inputHash,
+        policyDecision: constraint,
+        timestamp,
+        metadata: {
+          phase: "governance",
+          governanceVersion: governance.version,
+          approvalRequired,
+          sideEffect: governance.action.sideEffect,
+          stepId: step.stepId,
+        },
+      });
+      const persisted = await persistOutcome(deps, request, decision, executions.at(-1) ?? null);
+      return { decision: persisted, invocation: executions.at(-1) ?? null, invocations: executions, context };
+    }
+
+    const invocation = buildPendingInvocation(request, timestamp, plan, step, stepIndex);
+    let executed: CapabilityInvocation;
+    try {
+      executed = await deps.executor.execute({ request, invocation, context });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "erro desconhecido";
+      const decision = buildDecisionRecord({
+        request,
+        decision: "escalate",
+        reason: `falha do executor — escalado por falha fechada: ${detail}`,
+        inputHash,
+        policyDecision: constraint,
+        timestamp,
+        metadata: {
+          planId: plan.planId,
+          stepId: step.stepId,
+          planStepIndex: stepIndex,
+          planStepCount: plan.steps.length,
+          planningStrategy: plan.strategy,
+          governanceVersion: governance.version,
+        },
+      });
+      const persisted = await persistOutcome(deps, request, decision, invocation);
+      return { decision: persisted, invocation, invocations: [...executions, invocation], context };
+    }
+
+    executions.push(executed);
+    if (executed.status !== "completed") {
+      const decision = buildDecisionRecord({
+        request,
+        decision: "escalate",
+        reason: `executor retornou ${executed.status} — escalado por falha fechada`,
+        inputHash,
+        ...(executed.output !== undefined && { outputHash: deps.hashValue(executed.output) }),
+        policyDecision: constraint,
+        timestamp,
+        metadata: {
+          planId: plan.planId,
+          stepId: step.stepId,
+          planStepIndex: stepIndex,
+          planStepCount: plan.steps.length,
+          planningStrategy: plan.strategy,
+          governanceVersion: governance.version,
+        },
+      });
+      const persisted = await persistOutcome(deps, request, decision, executed);
+      return { decision: persisted, invocation: executed, invocations: executions, context };
+    }
   }
 
-  if (executed.status !== "completed") {
-    const decision = buildDecisionRecord({
-      request,
-      decision: "escalate",
-      reason: `executor retornou ${executed.status} — escalado por falha fechada`,
-      inputHash,
-      ...(executed.output !== undefined && {
-        outputHash: deps.hashValue(executed.output),
-      }),
-      policyDecision: constraint,
-      timestamp,
-      metadata: {
-        planId: plan.planId,
-        stepId: plan.steps[0]!.stepId,
-        planningStrategy: plan.strategy,
-      },
-    });
-    const persisted = await persistOutcome(deps, request, decision, executed);
-    return { decision: persisted, invocation: executed, context };
-  }
-
+  const executed = executions.at(-1)!;
   const decision = buildDecisionRecord({
     request,
     decision: "allow",
     reason: constraint.reason,
     inputHash,
-    ...(executed.output !== undefined && {
-      outputHash: deps.hashValue(executed.output),
-    }),
+    ...(executed.output !== undefined && { outputHash: deps.hashValue(executed.output) }),
     policyDecision: constraint,
     timestamp,
     metadata: {
       planId: plan.planId,
-      stepId: plan.steps[0]!.stepId,
+      stepId: plan.steps.at(-1)!.stepId,
       planningStrategy: plan.strategy,
+      planSteps: plan.steps.length,
+      executedSteps: executions.length,
+      planningVersion: plan.metadata.version,
+      primaryGoalId: plan.metadata.primaryGoalId,
+      contextEngineVersion: "v0.15",
+      governanceVersion: "v0.19",
+      agentRuntimeVersion: "v0.17",
     },
   });
   const persisted = await persistOutcome(deps, request, decision, executed);
-  return { decision: persisted, invocation: executed, context };
+  return { decision: persisted, invocation: executed, invocations: executions, context };
 }

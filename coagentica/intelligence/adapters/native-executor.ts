@@ -1,4 +1,5 @@
 import type { CapabilityInvocation } from "../contracts";
+import type { NativeActionDescriptor } from "../contracts/native-action";
 import {
   createCapabilityRegistry,
 } from "../capability-registry";
@@ -26,7 +27,8 @@ export function defineNativeCapability(
   capability: string,
   execute: (
     input: CapabilityExecuteInput
-  ) => Promise<CapabilityInvocation>
+  ) => Promise<CapabilityInvocation>,
+  action?: NativeActionDescriptor
 ): NativeCapabilityHandler {
   const normalized = capability.trim();
   if (!normalized) {
@@ -34,6 +36,7 @@ export function defineNativeCapability(
   }
   return {
     capability: normalized,
+    ...(action ? { action } : {}),
     execute,
   };
 }

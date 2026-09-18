@@ -6,8 +6,8 @@ export interface AgentExecutionBudget {
 }
 
 export interface AgentRuntimeStatus {
-  readonly version: "v0.10";
-  readonly mode: "bounded";
+  readonly version: "v0.10" | "v0.17";
+  readonly mode: "bounded" | "bounded-multi-step";
   readonly budget: AgentExecutionBudget;
 }
 
@@ -37,9 +37,10 @@ export function createAgentExecutionBudget(
 export function createAgentRuntimeStatus(
   budget: AgentExecutionBudget
 ): AgentRuntimeStatus {
+  const multiStep = budget.maxPlanSteps > 1 || budget.maxCapabilityInvocations > 1;
   return {
-    version: "v0.10",
-    mode: "bounded",
+    version: multiStep ? "v0.17" : "v0.10",
+    mode: multiStep ? "bounded-multi-step" : "bounded",
     budget,
   };
 }

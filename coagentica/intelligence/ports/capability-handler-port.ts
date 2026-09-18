@@ -1,4 +1,5 @@
 import type { CapabilityInvocation } from "../contracts";
+import type { NativeActionDescriptor } from "../contracts/native-action";
 import type { CapabilityExecuteInput } from "./capability-executor-port";
 
 /**
@@ -9,5 +10,6 @@ import type { CapabilityExecuteInput } from "./capability-executor-port";
  */
 export interface NativeCapabilityHandler {
   readonly capability: string;
+  readonly action?: NativeActionDescriptor;
   execute(input: CapabilityExecuteInput): Promise<CapabilityInvocation>;
 }

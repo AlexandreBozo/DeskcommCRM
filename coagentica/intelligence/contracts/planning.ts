@@ -1,6 +1,6 @@
 import type { IntelligenceRequest } from "../contracts";
 
-export type PlanningStrategy = "direct";
+export type PlanningStrategy = "direct" | "goal-aware" | "goal-aware-multi-step";
 
 export interface ExecutionPlanStep {
   readonly stepId: string;
@@ -39,20 +39,29 @@ export function validateExecutionPlan(
   if (plan?.requestId !== request.requestId) errors.push("requestId do plano diverge do request");
   if (plan?.tenantId !== request.tenantContext.tenantId) errors.push("tenantId do plano diverge do request");
   if (plan?.actorId !== request.actorContext.actorId) errors.push("actorId do plano diverge do request");
-  if (plan?.strategy !== "direct") errors.push("strategy de planejamento não suportada");
+  if (!["direct", "goal-aware", "goal-aware-multi-step"].includes(plan?.strategy)) {
+    errors.push("strategy de planejamento não suportada");
+  }
 
-  if (!Array.isArray(plan?.steps) || plan.steps.length !== 1) {
-    errors.push("planning direct exige exatamente um passo");
+  if (!Array.isArray(plan?.steps) || plan.steps.length < 1 || plan.steps.length > 3) {
+    errors.push("planning exige entre um e três passos");
     return errors;
   }
-
-  const step = plan.steps[0];
-  if (!nonEmpty(step?.stepId)) errors.push("stepId é obrigatório");
-  if (step?.capability !== request.capability) {
-    errors.push("capability do plano diverge do request");
+  if (plan.strategy !== "goal-aware-multi-step" && plan.steps.length !== 1) {
+    errors.push("planning single-step exige exatamente um passo");
   }
-  if (step?.input === null || typeof step?.input !== "object" || Array.isArray(step.input)) {
-    errors.push("input do passo deve ser objeto");
+
+  const seen = new Set<string>();
+  for (const [index, step] of plan.steps.entries()) {
+    if (!nonEmpty(step?.stepId)) errors.push("stepId é obrigatório");
+    if (seen.has(step.stepId)) errors.push("stepId duplicado");
+    seen.add(step.stepId);
+    if (index === 0 && step?.capability !== request.capability) {
+      errors.push("capability inicial do plano diverge do request");
+    }
+    if (step?.input === null || typeof step?.input !== "object" || Array.isArray(step.input)) {
+      errors.push("input do passo deve ser objeto");
+    }
   }
 
   return errors;

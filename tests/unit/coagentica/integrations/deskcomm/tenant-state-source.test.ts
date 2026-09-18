@@ -158,6 +158,7 @@ function rows(overrides: Partial<DeskcommTenantStateRows> = {}): DeskcommTenantS
     organization: org(),
     contacts: [contact()],
     memoryEntries: [memory()],
+    goals: [],
     knowledgeSources: [knowledge()],
     skillPointers: [pointer("sales", "v-tenant", "tenant-1")],
     skillVersions: [version("v-tenant", "tenant-1", "tenant skill")],

@@ -9,6 +9,7 @@ import {
   adaptAiKnowledgeSourceToKnowledgeSource,
   adaptContactToEntitySnapshot,
   adaptOrganizationToEntitySnapshot,
+  adaptOrgGoalToGoal,
   adaptOrgMemoryToEntitySnapshot,
   adaptOrgMemoryToMemoryEntry,
   adaptSkillToCapability,
@@ -21,6 +22,7 @@ import {
 type OrgRow = Database["public"]["Tables"]["organizations"]["Row"];
 type ContactRow = Database["public"]["Tables"]["contacts"]["Row"];
 type OrgMemoryRow = Database["public"]["Tables"]["org_memory_entries"]["Row"];
+type OrgGoalRow = Database["public"]["Tables"]["org_goals"]["Row"];
 type AiKnowledgeSourceRow =
   Database["public"]["Tables"]["ai_knowledge_sources"]["Row"];
 type SkillPointerRow = Database["public"]["Tables"]["skill_pointers"]["Row"];
@@ -30,6 +32,7 @@ export interface DeskcommTenantStateRows {
   readonly organization: OrgRow | null;
   readonly contacts: readonly ContactRow[];
   readonly memoryEntries: readonly OrgMemoryRow[];
+  readonly goals: readonly OrgGoalRow[];
   readonly knowledgeSources: readonly AiKnowledgeSourceRow[];
   readonly skillPointers: readonly SkillPointerRow[];
   readonly skillVersions: readonly SkillVersionRow[];
@@ -134,6 +137,12 @@ export function createDeskcommTenantStateSource(
         (row) => row.organization_id
       );
       assertTenantRows(
+        rows.goals,
+        normalizedTenantId,
+        "org_goals",
+        (row) => row.organization_id
+      );
+      assertTenantRows(
         rows.knowledgeSources,
         normalizedTenantId,
         "ai_knowledge_sources",
@@ -174,7 +183,7 @@ export function createDeskcommTenantStateSource(
           adaptAiKnowledgeSourceToKnowledgeSource
         ),
         memoryEntries: rows.memoryEntries.map(adaptOrgMemoryToMemoryEntry),
-        goals: [],
+        goals: rows.goals.map((row) => adaptOrgGoalToGoal(row, normalizedTenantId)),
         capabilities: effectiveSkills.map(({ pointer, version }) =>
           adaptSkillToCapability({
             pointer,
@@ -218,6 +227,7 @@ export function createSupabaseDeskcommTenantStateQueryPort(
         organizationResult,
         contactsResult,
         memoryResult,
+        goalsResult,
         knowledgeResult,
         tenantPointersResult,
         platformPointersResult,
@@ -239,6 +249,12 @@ export function createSupabaseDeskcommTenantStateQueryPort(
           .select("*")
           .eq("organization_id", normalizedTenantId)
           .in("status", ["active", "proposed"])
+          .order("created_at", { ascending: true })
+          .order("id", { ascending: true }),
+        client
+          .from("org_goals")
+          .select("*")
+          .eq("organization_id", normalizedTenantId)
           .order("created_at", { ascending: true })
           .order("id", { ascending: true }),
         client
@@ -268,6 +284,7 @@ export function createSupabaseDeskcommTenantStateQueryPort(
         memoryResult,
         "org_memory_entries query falhou"
       );
+      const goals = resultData(goalsResult, "org_goals query falhou");
       const knowledgeSources = resultData(
         knowledgeResult,
         "ai_knowledge_sources query falhou"
@@ -313,6 +330,7 @@ export function createSupabaseDeskcommTenantStateQueryPort(
         organization,
         contacts,
         memoryEntries,
+        goals,
         knowledgeSources,
         skillPointers: effectivePointers,
         skillVersions,

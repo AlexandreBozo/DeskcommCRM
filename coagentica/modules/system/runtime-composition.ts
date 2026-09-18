@@ -7,8 +7,10 @@ import {
   type IntelligenceRuntimeResult,
 } from "@/coagentica/intelligence/runtime";
 import { createNativeExecutor } from "@/coagentica/intelligence/adapters/native-executor";
-import { createDirectPlanner } from "@/coagentica/intelligence/adapters/direct-planner";
+import { createGoalAwarePlanner } from "@/coagentica/intelligence/adapters/direct-planner";
 import { createBoundedAgentRuntime } from "@/coagentica/intelligence/adapters/bounded-agent-runtime";
+import { createBoundedContextEngine } from "@/coagentica/intelligence/adapters/bounded-context-engine";
+import { createDefaultGovernanceGate } from "@/coagentica/intelligence/adapters/default-governance-gate";
 import { createReadOnlyMemory } from "@/coagentica/intelligence/adapters/read-only-memory";
 import {
   createAgentExecutionBudget,
@@ -64,15 +66,22 @@ export function createCoagenticaSystemRuntime(
   const store = createDeskcommDecisionStore(client);
   const learning = createDeskcommLearningObserver(client);
   const modelGateway = createDeskcommModelGateway();
-  const planner = createDirectPlanner();
+  const planner = createGoalAwarePlanner();
   const memory = createReadOnlyMemory(createMemoryBudget(20));
-  const agentBudget = createAgentExecutionBudget();
+  const contextEngine = createBoundedContextEngine();
+  const agentBudget = createAgentExecutionBudget({
+    maxPlanSteps: 3,
+    maxCapabilityInvocations: 3,
+    maxModelCalls: 0,
+  });
   const agentRuntimeStatus = createAgentRuntimeStatus(agentBudget);
   const handlers = createSystemNativeCapabilities({
     modelGateway,
     agentRuntimeStatus,
     memoryStatus: memory.status,
+    contextEngineStatus: contextEngine.status(),
   });
+  const governance = createDefaultGovernanceGate(handlers);
   const nativeExecutor = createNativeExecutor(handlers);
   const executor = createBoundedAgentRuntime(nativeExecutor, agentBudget);
 
@@ -84,6 +93,8 @@ export function createCoagenticaSystemRuntime(
         operationalContext,
         planner,
         memory,
+        contextEngine,
+        governance,
         learning,
         executor,
         store,

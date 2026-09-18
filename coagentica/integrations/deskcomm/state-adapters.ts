@@ -20,11 +20,13 @@ import type {
   KnowledgeSourceStatus,
   KnowledgeSourceType,
   TenantCapability,
+  TenantGoal,
   TenantKnowledgeSource,
   TenantMemoryEntry,
 } from "@/coagentica/tenant-runtime/contracts/state";
 import {
   createCapability,
+  createGoal,
   createKnowledgeSource,
   createMemoryEntry,
 } from "@/coagentica/tenant-runtime/contracts/state";
@@ -33,6 +35,7 @@ type OrgRow = Database["public"]["Tables"]["organizations"]["Row"];
 type ContactRow = Database["public"]["Tables"]["contacts"]["Row"];
 type OrgMemoryRow =
   Database["public"]["Tables"]["org_memory_entries"]["Row"];
+export type OrgGoalRow = Database["public"]["Tables"]["org_goals"]["Row"];
 type AiKnowledgeSourceRow =
   Database["public"]["Tables"]["ai_knowledge_sources"]["Row"];
 type SkillVersionRow =
@@ -195,6 +198,31 @@ export function adaptOrgMemoryToEntitySnapshot(
       status: entry.status,
       proposalId: entry.proposal_id,
     },
+  });
+}
+
+const GOAL_STATUSES = new Set(["draft", "active", "completed", "archived"] as const);
+
+export function adaptOrgGoalToGoal(row: OrgGoalRow, tenantId: string): TenantGoal {
+  if (row.organization_id !== tenantId) {
+    throw new Error("goal não pertence ao tenant solicitado");
+  }
+  if (!GOAL_STATUSES.has(row.status as "draft" | "active" | "completed" | "archived")) {
+    throw new Error(`status de goal inválido: ${row.status}`);
+  }
+
+  return createGoal({
+    goalId: row.id,
+    tenantId,
+    name: row.name,
+    description: row.description,
+    status: row.status as "draft" | "active" | "completed" | "archived",
+    metadata: row.metadata && typeof row.metadata === "object" && !Array.isArray(row.metadata)
+      ? { ...(row.metadata as Record<string, unknown>) }
+      : {},
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    ...(row.completed_at ? { completedAt: row.completed_at } : {}),
   });
 }
 

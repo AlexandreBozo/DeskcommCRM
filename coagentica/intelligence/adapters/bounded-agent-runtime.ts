@@ -34,7 +34,7 @@ function requirePlanningIdentity(input: CapabilityExecuteInput): void {
     planId.trim() === "" ||
     typeof stepId !== "string" ||
     stepId.trim() === "" ||
-    strategy !== "direct"
+    !["direct", "goal-aware", "goal-aware-multi-step"].includes(String(strategy))
   ) {
     throw new AgentRuntimeContractError(
       "invocação sem identidade canônica de planejamento"
@@ -69,6 +69,7 @@ export function createBoundedAgentRuntime(
   budget: AgentExecutionBudget = createAgentExecutionBudget()
 ): AgentRuntimePort {
   const status = createAgentRuntimeStatus(budget);
+  const invocationsByPlan = new Map<string, number>();
 
   return {
     status() {
@@ -78,6 +79,19 @@ export function createBoundedAgentRuntime(
     async execute(input) {
       assertBudget(budget);
       requirePlanningIdentity(input);
+
+      const metadata = input.invocation.metadata;
+      const planId = String(metadata.planId);
+      const planStepCount = typeof metadata.planStepCount === "number" ? metadata.planStepCount : 1;
+      const planStepIndex = typeof metadata.planStepIndex === "number" ? metadata.planStepIndex : 0;
+      if (!Number.isInteger(planStepCount) || planStepCount < 1 || planStepCount > budget.maxPlanSteps) {
+        throw new AgentRuntimeBudgetError("plano excede maxPlanSteps");
+      }
+      const used = invocationsByPlan.get(planId) ?? 0;
+      if (used >= budget.maxCapabilityInvocations) {
+        throw new AgentRuntimeBudgetError("plano excede maxCapabilityInvocations");
+      }
+      invocationsByPlan.set(planId, used + 1);
 
       const result = await executor.execute(input);
 
@@ -90,6 +104,9 @@ export function createBoundedAgentRuntime(
         throw new AgentRuntimeContractError(
           "executor alterou capability planejada"
         );
+      }
+      if (planStepIndex >= planStepCount - 1 || result.status !== "completed") {
+        invocationsByPlan.delete(planId);
       }
 
       return result;
