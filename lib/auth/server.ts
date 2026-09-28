@@ -10,7 +10,6 @@ import { isCanonicalCrmUrl } from "@/lib/supabase/canonical-crm";
 import { env } from "@/lib/env";
 import { empresaExigeMfa, exigeCadastroDeMfa } from "@/lib/auth/politica-mfa";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
-import { listarMembershipsTrialing, mesclarMemberships } from "@/lib/auth/trialing-memberships";
 import type { AuthUser, Role, UserOrgMembership, ActiveOrg } from "./types";
 
 const ACTIVE_ORG_COOKIE = "active_org";
@@ -224,9 +223,7 @@ export async function loadAuthUser(): Promise<AuthUser | null> {
   }
 
   const support = await readSupportContext(supabase);
-  const trialingMemberships = await listarMembershipsTrialing(user.id);
-  const memberships = mesclarMemberships(mapped.organizations, trialingMemberships);
-  const { locale } = mapped;
+  const { locale, organizations: memberships } = mapped;
   // A cadeia inteira num lugar só: pessoa → organização ativa → padrão. Quem
   // consome pede `idioma` e não precisa saber que existe uma ordem.
   //
@@ -237,7 +234,7 @@ export async function loadAuthUser(): Promise<AuthUser | null> {
   const idioma = normalizarIdioma(
     locale ?? support?.locale ?? (await localeDaOrgAtiva(memberships)),
   );
-  return { ...mapped, organizations: memberships, idioma, support };
+  return { ...mapped, idioma, support };
 }
 
 /**

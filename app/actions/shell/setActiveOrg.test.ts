@@ -4,13 +4,11 @@ import { cookies } from "next/headers";
 import { audit } from "@/lib/audit";
 import { loadAuthUser, mfaEmDivida } from "@/lib/auth/server";
 import { createClient } from "@/lib/supabase/server";
-import { listarMembershipsTrialing } from "@/lib/auth/trialing-memberships";
 
 vi.mock("next/headers", () => ({ cookies: vi.fn() }));
 vi.mock("@/lib/auth/server", () => ({ loadAuthUser: vi.fn(), mfaEmDivida: vi.fn() }));
 vi.mock("@/lib/supabase/server", () => ({ createClient: vi.fn() }));
 vi.mock("@/lib/audit", () => ({ audit: vi.fn(async () => undefined) }));
-vi.mock("@/lib/auth/trialing-memberships", () => ({ listarMembershipsTrialing: vi.fn() }));
 vi.mock("@/lib/supabase/cookie-secure", () => ({ cookieSecure: () => false }));
 
 const USER_ID = "11111111-1111-4111-8111-111111111111";
@@ -26,7 +24,6 @@ describe("setActiveOrg", () => {
     vi.mocked(mfaEmDivida).mockResolvedValue(false);
     vi.mocked(cookies).mockResolvedValue({ get: vi.fn(() => undefined), set } as never);
     vi.mocked(createClient).mockResolvedValue({ rpc } as never);
-    vi.mocked(listarMembershipsTrialing).mockResolvedValue([]);
   });
   it("autoriza somente quando fn_can_access_org confirma p_org", async () => {
     rpc.mockResolvedValue({ data: true, error: null });
@@ -42,16 +39,6 @@ describe("setActiveOrg", () => {
       }),
     );
   });
-  it("aceita organização trialing quando a membership fresca confirma acesso", async () => {
-    rpc.mockResolvedValue({ data: false, error: null });
-    vi.mocked(listarMembershipsTrialing).mockResolvedValue([
-      { organization_id: ORG_ID, organization_name: "DOM", role: "admin" },
-    ]);
-    const { setActiveOrg } = await import("./setActiveOrg");
-    await expect(setActiveOrg(ORG_ID)).resolves.toEqual({ ok: true });
-    expect(set).toHaveBeenCalledWith("active_org", ORG_ID, expect.any(Object));
-  });
-
   it("nega quando a RPC falha ou não confirma acesso", async () => {
     rpc.mockResolvedValue({ data: false, error: null });
     const { setActiveOrg } = await import("./setActiveOrg");
