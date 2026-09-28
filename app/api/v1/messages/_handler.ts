@@ -314,12 +314,14 @@ export async function sendMessageHandler(
       supabase
         .from("conversations")
         .select(convSelect(true))
+        .eq("organization_id", ctx.organization_id)
         .eq("id", input.conversation_id)
         .maybeSingle(),
     () =>
       supabase
         .from("conversations")
         .select(convSelect(false))
+        .eq("organization_id", ctx.organization_id)
         .eq("id", input.conversation_id)
         .maybeSingle(),
   );
@@ -618,6 +620,7 @@ export async function sendMessageHandler(
         error_code: "channel_archived",
         error_message: "Este número foi excluído da Central de Conexões.",
       })
+      .eq("organization_id", ctx.organization_id)
       .eq("id", message.id)
       .select(MSG_COLS)
       .maybeSingle();
@@ -628,6 +631,7 @@ export async function sendMessageHandler(
       .update({
         metadata: { ...(message.metadata ?? {}), queued_reason: adapter.codes.notConfigured },
       })
+      .eq("organization_id", ctx.organization_id)
       .eq("id", message.id)
       .select(MSG_COLS)
       .maybeSingle();
@@ -640,6 +644,7 @@ export async function sendMessageHandler(
         error_code: "missing_phone_number",
         error_message: "Contato sem telefone para envio WhatsApp.",
       })
+      .eq("organization_id", ctx.organization_id)
       .eq("id", message.id)
       .select(MSG_COLS)
       .maybeSingle();
@@ -653,6 +658,7 @@ export async function sendMessageHandler(
           queued_reason: "channel_session_not_working",
         },
       })
+      .eq("organization_id", ctx.organization_id)
       .eq("id", message.id)
       .select(MSG_COLS)
       .maybeSingle();
@@ -827,6 +833,7 @@ export async function sendMessageHandler(
             ? { template_name: input.template_name, template_language: input.template_language }
             : {}),
         })
+        .eq("organization_id", ctx.organization_id)
         .eq("id", message.id)
         .select(MSG_COLS)
         .maybeSingle();
@@ -858,6 +865,7 @@ export async function sendMessageHandler(
           .update({
             metadata: { ...(message.metadata ?? {}), queued_reason: adapter.codes.notConfigured },
           })
+          .eq("organization_id", ctx.organization_id)
           .eq("id", message.id)
           .select(MSG_COLS)
           .maybeSingle();
@@ -872,6 +880,7 @@ export async function sendMessageHandler(
           error_code: code,
           error_message: msg,
         })
+        .eq("organization_id", ctx.organization_id)
         .eq("id", message.id)
         .select(MSG_COLS)
         .maybeSingle();
@@ -904,7 +913,11 @@ export async function sendMessageHandler(
     if (silenceUntil) conversationUpdate.bot_silenced_until = silenceUntil;
   }
 
-  await supabase.from("conversations").update(conversationUpdate).eq("id", c.id);
+  await supabase
+    .from("conversations")
+    .update(conversationUpdate)
+    .eq("organization_id", ctx.organization_id)
+    .eq("id", c.id);
 
   // Envio pelo CRM não passa por `fn_mark_conversation_message` — carimba o
   // contato aqui para /app/contacts refletir a resposta (migration 0162).

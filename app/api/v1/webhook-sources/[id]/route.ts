@@ -89,6 +89,7 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
     .from("webhook_sources")
     .update(patch)
     .eq("id", id)
+    .eq("organization_id", activeOrg.orgId)
     .select("*")
     .single();
   if (updErr) return fail("internal_error", updErr.message, 500, { requestId });
@@ -129,7 +130,11 @@ export async function DELETE(_req: NextRequest, ctx: RouteCtx): Promise<Response
   if (fetchErr) return fail("internal_error", fetchErr.message, 500, { requestId });
   if (!existing) return fail("not_found", t("Fonte não encontrada."), 404, { requestId });
 
-  const { error: delErr } = await supabase.from("webhook_sources").delete().eq("id", id);
+  const { error: delErr } = await supabase
+    .from("webhook_sources")
+    .delete()
+    .eq("id", id)
+    .eq("organization_id", activeOrg.orgId);
   if (delErr) return fail("internal_error", delErr.message, 500, { requestId });
 
   void audit({
