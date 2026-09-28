@@ -28,10 +28,7 @@ export async function GET(): Promise<Response> {
   });
   if (!authz.ok) return authz.response;
 
-  const summary = await googleAdsAppCredentialSummary(
-    createAdminClient(),
-    authz.org.orgId,
-  );
+  const summary = await googleAdsAppCredentialSummary(createAdminClient(), authz.org.orgId);
   return ok(summary, { requestId });
 }
 
@@ -75,11 +72,19 @@ export async function POST(req: NextRequest): Promise<Response> {
         { requestId },
       );
     }
+    if (result.detail === "cipher_unavailable") {
+      return fail(
+        "google_ads_cipher_unavailable",
+        "Não foi possível criptografar o Client Secret. Verifique a configuração da chave mestra de criptografia do servidor.",
+        503,
+        { requestId },
+      );
+    }
     return fail(
-      "google_ads_config_save_failed",
-      "Não consegui guardar a configuração do Google Ads.",
+      "google_ads_config_persistence_failed",
+      "Não foi possível guardar a configuração do Google Ads.",
       500,
-      { requestId, details: result.detail },
+      { requestId },
     );
   }
 

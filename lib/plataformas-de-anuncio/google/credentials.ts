@@ -1,12 +1,10 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
 import { env } from "@/lib/env";
+import { logger } from "@/lib/logger";
 import { decryptWebhookSecret, encryptWebhookSecret } from "@/lib/webhooks/secrets";
 
-import {
-  googleAdsRedirectUri,
-  type GoogleAdsConfig,
-} from "./config";
+import { googleAdsRedirectUri, type GoogleAdsConfig } from "./config";
 
 interface GoogleAdsAppCredentialRow {
   oauth_client_id: string;
@@ -68,18 +66,13 @@ export async function readGoogleAdsAppConfig(
 ): Promise<GoogleAdsConfig | null> {
   const { data, error } = await admin
     .from("google_ads_app_credentials")
-    .select(
-      "oauth_client_id,oauth_client_secret_encrypted,developer_token_encrypted",
-    )
+    .select("oauth_client_id,oauth_client_secret_encrypted,developer_token_encrypted")
     .eq("organization_id", organizationId)
     .maybeSingle();
 
   if (!error && data) {
     const row = data as GoogleAdsAppCredentialRow;
-    const clientSecret = await decryptWebhookSecret(
-      admin,
-      row.oauth_client_secret_encrypted,
-    );
+    const clientSecret = await decryptWebhookSecret(admin, row.oauth_client_secret_encrypted);
     const developerToken = row.developer_token_encrypted
       ? await decryptWebhookSecret(admin, row.developer_token_encrypted)
       : null;
@@ -96,6 +89,9 @@ export async function readGoogleAdsAppConfig(
   return envConfig();
 }
 
+type GoogleAdsCredentialSaveFailure =
+  "client_secret_required" | "cipher_unavailable" | "persistence_failed";
+
 export async function saveGoogleAdsAppCredentials(
   admin: SupabaseClient,
   organizationId: string,
@@ -105,22 +101,30 @@ export async function saveGoogleAdsAppCredentials(
     clientSecret?: string | null;
     developerToken?: string | null;
   },
-): Promise<{ ok: true } | { ok: false; detail: string }> {
-  const { data: existing } = await admin
+): Promise<{ ok: true } | { ok: false; detail: GoogleAdsCredentialSaveFailure }> {
+  const { data: existing, error: lookupError } = await admin
     .from("google_ads_app_credentials")
     .select("oauth_client_secret_encrypted,developer_token_encrypted")
     .eq("organization_id", organizationId)
     .maybeSingle();
 
+  if (lookupError) {
+    logger.warn("[google-ads.credentials] leitura da configuração falhou", {
+      organizationId,
+      error: lookupError.message,
+    });
+    return { ok: false, detail: "persistence_failed" };
+  }
+
+  const providedClientSecret = input.clientSecret?.trim() ?? "";
   let clientSecretEncrypted =
     (existing?.oauth_client_secret_encrypted as string | null | undefined) ?? null;
-  if (input.clientSecret?.trim()) {
-    clientSecretEncrypted = await encryptWebhookSecret(
-      admin,
-      input.clientSecret.trim(),
-    );
-  }
-  if (!clientSecretEncrypted) {
+  if (providedClientSecret) {
+    clientSecretEncrypted = await encryptWebhookSecret(admin, providedClientSecret);
+    if (!clientSecretEncrypted) {
+      return { ok: false, detail: "cipher_unavailable" };
+    }
+  } else if (!clientSecretEncrypted) {
     return { ok: false, detail: "client_secret_required" };
   }
 
@@ -146,6 +150,12 @@ export async function saveGoogleAdsAppCredentials(
     { onConflict: "organization_id" },
   );
 
-  if (error) return { ok: false, detail: error.message };
+  if (error) {
+    logger.warn("[google-ads.credentials] persistência da configuração falhou", {
+      organizationId,
+      error: error.message,
+    });
+    return { ok: false, detail: "persistence_failed" };
+  }
   return { ok: true };
 }
