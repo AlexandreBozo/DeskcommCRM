@@ -39,15 +39,22 @@ export default async function NewAgentPage() {
   }
 
   const supabase = await createClient();
-  const [credentialsRes, channelSessions] = await Promise.all([
+  const [credentialsRes, channelSessions, areasRes] = await Promise.all([
     supabase
       .from("ai_provider_credentials_safe")
       .select(CREDENTIAL_COLUMNS)
       .eq("organization_id", activeOrg.orgId),
     listSelectableChannels(supabase, activeOrg.orgId),
+    supabase
+      .from("coagentica_areas")
+      .select("id, name")
+      .eq("organization_id", activeOrg.orgId)
+      .eq("is_active", true)
+      .order("name"),
   ]);
 
   const credentials = (credentialsRes.data ?? []) as unknown as CredentialRow[];
+  const areas = (areasRes.data ?? []) as { id: string; name: string }[];
 
   return (
     <div className="flex h-full flex-col gap-6 p-6">
@@ -56,6 +63,7 @@ export default async function NewAgentPage() {
         credentials={credentials}
         provedoresDaInstalacao={provedoresDaInstalacao()}
         channelSessions={channelSessions}
+        areas={areas}
       />
     </div>
   );

@@ -10,10 +10,25 @@ export const supportSchema = z.object({
 });
 export type SupportContext = z.infer<typeof supportSchema>;
 
+/** The canonical CRM deliberately does not expose this legacy RPC. */
+export function isMissingSupportContextFunction(error: { code?: string; message?: string } | null): boolean {
+  if (error?.code === "PGRST202") return true;
+  const message = error?.message?.toLowerCase() ?? "";
+  return (
+    message.includes("fn_support_context") &&
+    (message.includes("could not find the function") ||
+      message.includes("function does not exist") ||
+      message.includes("function not found"))
+  );
+}
+
 /** Chamar depois de getUser. A RPC resolve auth.uid + auth.session_id, nunca cookie. */
 export async function readSupportContext(db: Awaited<ReturnType<typeof createClient>>): Promise<SupportContext | null> {
   const { data, error } = await db.rpc("fn_support_context");
-  if (error) throw new Error("Não foi possível confirmar o acompanhamento administrativo.");
+  if (error) {
+    if (isMissingSupportContextFunction(error)) return null;
+    throw new Error("Não foi possível confirmar o acompanhamento administrativo.");
+  }
   return data === null ? null : supportSchema.parse(data);
 }
 

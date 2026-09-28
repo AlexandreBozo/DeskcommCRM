@@ -1,5 +1,4 @@
 "use client";
-import Link from "next/link";
 import { useState } from "react";
 import { flushSync } from "react-dom";
 import { toast } from "sonner";
@@ -60,9 +59,6 @@ export function TenantSwitcher() {
             {active?.orgId === org.organization_id && <span className="text-xs text-muted-foreground">✓</span>}
           </DropdownMenuItem>
         ))}
-        {user.is_platform_admin && <DropdownMenuItem asChild>
-          <Link href="/admin/tenants">{t("Gerenciar organizações")}</Link>
-        </DropdownMenuItem>}
       </DropdownMenuContent>
     </DropdownMenu>
   );

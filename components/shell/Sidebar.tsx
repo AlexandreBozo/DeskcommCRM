@@ -9,6 +9,7 @@ import { toggleSidebar } from "@/app/actions/shell/toggleSidebar";
 import { useAuth } from "@/hooks/auth/AuthProvider";
 import { ConnectionHealthDot } from "@/components/connections/ConnectionHealthDot";
 import { VersionFooter } from "@/components/shell/VersionFooter";
+import { TenantSwitcher } from "@/components/shell/TenantSwitcher";
 import { useMarcaDaInstalacao } from "@/lib/branding/contexto";
 import { GRUPO_NO_RODAPE, sidebarGroups } from "@/lib/navigation/registry";
 
@@ -139,6 +140,12 @@ export function SidebarContent({
           </span>
         )}
       </div>
+      {!collapsed && (user.organizations.length > 1 || user.is_platform_admin) && (
+        <div className="border-b px-2 py-2">
+          <p className="px-2 pb-1 text-xs font-medium text-muted-foreground">{t("Organização")}</p>
+          <TenantSwitcher />
+        </div>
+      )}
       {/*
         A DENSIDADE É MEDIDA, NÃO ESTÉTICA.
 

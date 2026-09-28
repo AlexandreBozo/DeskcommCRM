@@ -24,6 +24,8 @@ interface Props {
   cobertura?: CoberturaPorFunil;
   /** O acervo da organização, para a seção "o que ele consulta" (0181). */
   materiais?: MaterialDoAcervo[];
+  /** Áreas da organização para o seletor de área de atuação. */
+  areas?: { id: string; name: string }[];
   agent: AgentRow;
   draft: AgentVersionRow | null;
   published: AgentVersionRow | null;

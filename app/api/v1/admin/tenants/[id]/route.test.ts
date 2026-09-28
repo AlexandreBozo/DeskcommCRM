@@ -27,14 +27,13 @@ const ORG_ID = "22222222-2222-4222-8222-222222222222";
 const ORG = {
   id: ORG_ID,
   slug: "org",
-  display_name: "Org",
-  legal_name: null,
-  cnpj: null,
+  name: "Org",
+  primary_domain: null,
+  subdomain: null,
+  metadata: {},
   status: "active",
-  onboarded_at: "2026-01-01T00:00:00Z",
-  suspended_at: null,
   created_at: "2026-01-01T00:00:00Z",
-  settings: {},
+  updated_at: "2026-01-01T00:00:00Z",
 };
 
 /** Linhas de lgpd_requests com status do vocabulário real do CHECK. */

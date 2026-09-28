@@ -5,7 +5,7 @@ import { traduzir } from "@/lib/i18n/dicionario";
 
 export default async function AdminInboxIndexPage() {
   const { user } = await requirePlatformAdmin();
-  const idioma = normalizarIdioma((user.user_metadata?.locale as string | undefined) ?? null);
+  const idioma = normalizarIdioma(user.locale ?? null);
 
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 text-center text-muted-foreground">

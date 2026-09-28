@@ -1,0 +1,5 @@
+import { requireAuth } from "@/lib/auth/server";
+import { contasPagar } from "@/lib/financeiro/mock";
+import { ContasClient } from "../_components/ContasClient";
+export const dynamic = "force-dynamic";
+export default async function ContasPagarPage() { await requireAuth(); return <div className="flex h-full flex-col gap-6 p-6"><header><h1 className="text-2xl font-semibold tracking-tight">Contas a pagar</h1><p className="text-sm text-muted-foreground">Compromissos, vencimentos e pagamentos previstos.</p></header><ContasClient filtros={["Todas", "Hoje", "Próximos 7 dias", "Este mês", "Atrasadas", "Pagas"]} placeholder="Buscar fornecedor ou contrato" colunas={[{ chave: "vencimento", label: "Vencimento" }, { chave: "fornecedor", label: "Fornecedor" }, { chave: "contrato", label: "Contrato" }, { chave: "competencia", label: "Competência" }, { chave: "valor", label: "Valor" }, { chave: "status", label: "Status" }, { chave: "origem", label: "Origem" }]} linhas={contasPagar} /><p className="text-xs text-muted-foreground">Dados demonstrativos. Nenhum lançamento está conectado ao banco nesta etapa.</p></div>; }

@@ -179,6 +179,7 @@ export const agentMcpCreateSchema = z
     description: z.string().trim().max(2000).optional(),
     priority: z.number().int().min(0).max(1000).default(0),
     version: versionShapeSchema,
+    area_id: z.string().uuid().nullable().optional(),
   })
   .strict();
 
@@ -187,6 +188,7 @@ export const agentMcpPatchSchema = z
     name: z.string().trim().min(1).max(120).optional(),
     description: z.string().trim().max(2000).nullable().optional(),
     priority: z.number().int().min(0).max(1000).optional(),
+    area_id: z.string().uuid().nullable().optional(),
   })
   .strict();
 

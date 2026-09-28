@@ -15,7 +15,7 @@ import type { Role } from "@/lib/auth/types";
  * Doutrina: docs/doctrine/sistema-vivo.md — "por qual porta se chega até mim?"
  */
 
-export type NavGroupId = "atendimento" | "crm" | "ia" | "canais" | "analise" | "organizacao";
+export type NavGroupId = "atendimento" | "crm" | "ia" | "canais" | "analise" | "financeiro" | "organizacao";
 
 export interface NavGroup {
   id: NavGroupId;
@@ -71,6 +71,7 @@ export const NAV_GROUPS: NavGroup[] = [
   { id: "ia", label: "Agente de IA", hub: { href: "/app/ai", label: "Ver tudo em IA" } },
   { id: "canais", label: "Canais" },
   { id: "analise", label: "Análise", hub: { href: "/app/analise", label: "Ver tudo em Análise" } },
+  { id: "financeiro", label: "Financeiro", hub: { href: "/app/financeiro", label: "Ver tudo em Financeiro" } },
   {
     id: "organizacao",
     label: "Organização",
@@ -505,6 +506,16 @@ export const NAV_CATALOG = [
     sidebar: true,
   },
   {
+    href: "/app/ads/google",
+    label: "Google Ads",
+    description: "Investimento, cliques, conversões e ROAS das campanhas do Google.",
+    icon: "Megaphone",
+    group: "analise",
+    section: "Os números do período",
+    minRole: "manager",
+    sidebar: true,
+  },
+  {
     // Irmã de "Desempenho", não a mesma coisa: lá é DESFECHO (funil agora,
     // ganho/perdido por atendente); aqui é o TRABALHO que aconteceu no
     // período, com quem fez cada coisa. Um mês inteiro atendido pela IA e um
@@ -539,6 +550,74 @@ export const NAV_CATALOG = [
     minRole: "manager",
   },
 
+  // ---- Financeiro — visão e operação financeira ----
+  {
+    href: "/app/financeiro/contas-pagar",
+    label: "Contas a pagar",
+    description: "Compromissos financeiros, vencimentos e situação de cada pagamento.",
+    icon: "Receipt",
+    group: "financeiro",
+    section: "Operação financeira",
+    minRole: "manager",
+    sidebar: true,
+  },
+  {
+    href: "/app/financeiro/contas-receber",
+    label: "Contas a receber",
+    description: "Receitas previstas, vencimentos e situação dos recebimentos.",
+    icon: "ChartLineUp",
+    group: "financeiro",
+    section: "Operação financeira",
+    minRole: "manager",
+    sidebar: true,
+  },
+  {
+    href: "/app/financeiro/configuracoes",
+    label: "Configurações financeiras",
+    description: "Fornecedores, categorias, centros de custo e integrações do financeiro.",
+    icon: "Gear",
+    group: "financeiro",
+    section: "Estrutura financeira",
+    minRole: "manager",
+    sidebar: true,
+  },
+  {
+    href: "/app/financeiro/configuracoes/fornecedores",
+    label: "Fornecedores",
+    description: "Cadastre fornecedores financeiros, contratos e faturas.",
+    icon: "Buildings",
+    group: "financeiro",
+    section: "Estrutura financeira",
+    minRole: "manager",
+  },
+  {
+    href: "/app/financeiro/configuracoes/categorias",
+    label: "Categorias",
+    description: "Classifique receitas e despesas por categoria financeira.",
+    icon: "Tag",
+    group: "financeiro",
+    section: "Estrutura financeira",
+    minRole: "manager",
+  },
+  {
+    href: "/app/financeiro/configuracoes/centros-custo",
+    label: "Centros de custo",
+    description: "Organize custos e receitas por centro de responsabilidade.",
+    icon: "Gauge",
+    group: "financeiro",
+    section: "Estrutura financeira",
+    minRole: "manager",
+  },
+  {
+    href: "/app/financeiro/configuracoes/integracoes",
+    label: "Integrações financeiras",
+    description: "Configure fontes externas sem misturá-las aos fornecedores.",
+    icon: "Plugs",
+    group: "financeiro",
+    section: "Estrutura financeira",
+    minRole: "manager",
+  },
+
   // ---- Organização — conta, empresa, acesso ----
   {
     href: "/app/settings/profile",
@@ -565,12 +644,21 @@ export const NAV_CATALOG = [
     section: "Sua conta",
   },
   {
-    href: "/app/team",
-    label: "Equipe",
-    description: "Quem trabalha aqui, com qual papel e quanta conversa cada um aguenta.",
+    href: "/app/settings/users",
+    label: "Usuários e acessos",
+    description: "Convide pessoas, defina papéis e gerencie quem pode acessar esta organização.",
     icon: "UsersThree",
     group: "organizacao",
     section: "Sua empresa",
+    minRole: "manager",
+  },
+  {
+    href: "/admin/tenants",
+    label: "Gerenciar tenants",
+    description: "Crie, edite, suspenda e acompanhe todos os tenants permitidos ao seu perfil.",
+    icon: "Buildings",
+    group: "organizacao",
+    section: "Administração",
   },
   {
     // A porta que faltava (issue #144): rodízio de atendimento e restrição de
@@ -628,6 +716,15 @@ export const NAV_CATALOG = [
     // `admin` pelo mesmo critério da vizinha, mesmo o token sendo só de
     // leitura: ele expõe orçamento e performance da conta inteira, e quem
     // apenas LÊ a tela (`manager`) não precisa poder trocar a credencial.
+    minRole: "admin",
+  },
+  {
+    href: "/app/settings/google-ads",
+    label: "Google Ads",
+    description: "Conectar por OAuth a conta do Google Ads para ler campanhas e indicadores.",
+    icon: "Megaphone",
+    group: "organizacao",
+    section: "Sua empresa",
     minRole: "admin",
   },
   {

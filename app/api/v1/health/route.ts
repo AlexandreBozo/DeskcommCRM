@@ -123,11 +123,11 @@ async function checkRedis(): Promise<Check> {
    * para quem não tem o segredo interno, e quem tem precisa ver QUAL valor está
    * malformado — dizer só "inválido" sem dizer qual não conserta nada.
    */
+  if (!url || !token) {
+    return { status: "degraded", latency_ms: 0, error: "not_configured", reason: "nao_configurado" };
+  }
   const config = validarConfigRedisRest(url, token);
   if (!config.ok) {
-    if (config.reason === "nao_configurado") {
-      return { status: "degraded", latency_ms: 0, error: "not_configured", reason: "nao_configurado" };
-    }
     return {
       status: "down",
       latency_ms: 0,

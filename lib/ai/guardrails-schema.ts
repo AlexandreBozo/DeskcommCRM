@@ -115,6 +115,7 @@ export const agentPatchSchema = z
     system_prompt: z.string().min(20).max(10000).optional(),
     config: agentConfigSchema.partial().optional(),
     guardrails: guardrailsSchema.optional(),
+    area_id: z.string().uuid().nullable().optional(),
   })
   .strict();
 export type AgentPatch = z.infer<typeof agentPatchSchema>;
@@ -131,6 +132,7 @@ export const agentCreateSchema = z
       .default(
         "Você é um assistente da loja. Responda com clareza e cordialidade, em português do Brasil. Use a base de conhecimento abaixo quando relevante.",
       ),
+    area_id: z.string().uuid().nullable().optional(),
   })
   .strict();
 export type AgentCreate = z.infer<typeof agentCreateSchema>;

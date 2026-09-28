@@ -1,36 +1,96 @@
 import { lerInterface } from "@/lib/navigation/interface";
-/**
- * Server-side auth helpers — load AuthUser, resolve active org, gate routes.
- *
- * Uses the service-role admin client to read tenant-scoped tables
- * (`user_organizations`, `platform_admins`, `organizations`) — RLS bypass is
- * intentional here because we resolve the user from the validated JWT first
- * and then filter by `user_id` (a trusted source).
- */
+/** Server-side auth helpers — load AuthUser, resolve active org, gate routes. */
 import { readSupportContext } from "@/lib/impersonate/support";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { logger } from "@/lib/logger";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isCanonicalCrmUrl } from "@/lib/supabase/canonical-crm";
+import { env } from "@/lib/env";
 import { empresaExigeMfa, exigeCadastroDeMfa } from "@/lib/auth/politica-mfa";
 import { normalizarIdioma } from "@/lib/i18n/idiomas";
 import type { AuthUser, Role, UserOrgMembership, ActiveOrg } from "./types";
 
 const ACTIVE_ORG_COOKIE = "active_org";
 
-interface RawMembershipRow {
-  interface_settings?: unknown;
+interface AuthContextOrganization {
   organization_id: string;
-  role: string;
-  /** Só para ORDENAR — a lista decide qual organização fica ativa sem cookie. */
-  accepted_at?: string | null;
-  organizations: OrgJoin | OrgJoin[] | null;
+  organization_name: string;
+  role: Role;
+  locale: string | null;
+  timezone: string | null;
+  interface_settings: unknown;
 }
 
-interface OrgJoin {
-  display_name: string;
-  locale: string | null;
+interface AuthContext {
+  id: string;
+  email: string;
+  full_name: string | null;
+  avatar_url: string | null;
+  is_platform_admin: boolean;
+  organizations: AuthContextOrganization[];
+}
+
+function contextoDeAuth(data: unknown): AuthContext | null {
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const context = data as Partial<AuthContext>;
+  if (
+    typeof context.id !== "string" ||
+    typeof context.email !== "string" ||
+    (typeof context.full_name !== "string" && context.full_name !== null) ||
+    (typeof context.avatar_url !== "string" && context.avatar_url !== null) ||
+    typeof context.is_platform_admin !== "boolean" ||
+    !Array.isArray(context.organizations)
+  )
+    return null;
+  const organizations = context.organizations.map((organization) => {
+    if (!organization || typeof organization !== "object" || Array.isArray(organization))
+      return null;
+    const org = organization as Partial<AuthContextOrganization>;
+    if (
+      typeof org.organization_id !== "string" ||
+      typeof org.organization_name !== "string" ||
+      !["admin", "manager", "agent", "viewer"].includes(org.role ?? "") ||
+      (typeof org.locale !== "string" && org.locale !== null) ||
+      (typeof org.timezone !== "string" && org.timezone !== null)
+    )
+      return null;
+    return {
+      organization_id: org.organization_id,
+      organization_name: org.organization_name,
+      role: org.role,
+      locale: org.locale,
+      timezone: org.timezone,
+      interface_settings: org.interface_settings,
+    };
+  });
+  if (organizations.some((organization) => organization === null)) return null;
+  return { ...context, organizations: organizations as AuthContextOrganization[] } as AuthContext;
+}
+
+export function mapearContextoDeAuth(
+  data: unknown,
+  authenticatedUser: { id: string; email?: string | null; user_metadata?: Record<string, unknown> },
+): Omit<AuthUser, "idioma" | "support"> | null {
+  const context = contextoDeAuth(data);
+  if (!context || context.id !== authenticatedUser.id) return null;
+  return {
+    id: context.id,
+    email: context.email || authenticatedUser.email || "",
+    full_name: context.full_name,
+    avatar_url: context.avatar_url,
+    is_platform_admin: context.is_platform_admin,
+    locale: (authenticatedUser.user_metadata?.locale as string | undefined) ?? null,
+    timezone: (authenticatedUser.user_metadata?.timezone as string | undefined) ?? null,
+    organizations: context.organizations.map((organization) => ({
+      organization_id: organization.organization_id,
+      organization_name: organization.organization_name,
+      role: organization.role,
+      interface_settings: lerInterface(organization.interface_settings).settings,
+      locale: organization.locale,
+    })),
+  };
 }
 
 /**
@@ -56,7 +116,7 @@ async function localeDaOrgAtiva(memberships: UserOrgMembership[]): Promise<strin
  * da organização ativa, o sorteio decide TAMBÉM em que língua o sistema abre.
  * As duas coisas andam juntas: não tire a ordenação de lá sem resolver isto.
  */
-function escolherMembroAtivo(
+export function escolherMembroAtivo(
   memberships: UserOrgMembership[],
   cookieOrg: string | undefined,
 ): UserOrgMembership | null {
@@ -72,10 +132,8 @@ function escolherMembroAtivo(
  * Loads the AuthUser for the current request. Returns null if unauthenticated.
  * Use only in Server Components / Route Handlers / Server Actions.
  *
- * Uses the user-scoped server client (cookie session). RLS policies allow:
- * - user_organizations: user_id = auth.uid() (user_orgs_select)
- * - organizations: id IN fn_user_org_ids()  (orgs_select)
- * - platform_admins: only platform admins read (so non-admins get null — correct)
+ * Usa o client user-scoped e `fn_auth_context()`, que é a fonte única de
+ * identidade, memberships ativas e privilégio de plataforma para a sessão.
  */
 /**
  * "Não havia sessão nenhuma" — o estado NORMAL, não um incidente.
@@ -149,92 +207,23 @@ export async function loadAuthUser(): Promise<AuthUser | null> {
   }
   if (!user) return null;
 
-  // Platform admin? (active = no revoked_at). RLS returns null for non-admins.
-  //
-  // ⚠️ O erro é capturado de propósito: aqui `data: null` é AMBÍGUO — significa tanto
-  // "não é platform admin" (RLS filtrou, estado normal) quanto "a query falhou".
-  // Sem separar os dois, um banco instável rebaixa silenciosamente um super-admin.
-  const { data: paRow, error: paErro } = await supabase
-    .from("platform_admins")
-    .select("user_id, revoked_at")
-    .eq("user_id", user.id)
-    .is("revoked_at", null)
-    .maybeSingle();
-
-  // Org memberships (only active = not revoked, accepted)
-  // ⚠️ `ORDER BY` NÃO É ENFEITE AQUI: esta lista decide QUAL ORGANIZAÇÃO FICA
-  // ATIVA para quem não tem o cookie `active_org` — `resolveActiveOrg` pega
-  // `organizations[0]`. Sem ordenação, "a primeira" é o que o Postgres devolver,
-  // e isso não é estável por especificação: muda com plano de execução, com a
-  // ordem física das linhas e com qualquer reescrita delas.
-  //
-  // O efeito para quem administra DUAS empresas na mesma instalação: entrar sem
-  // cookie (primeiro acesso, sessão nova, cookie expirado) podia cair numa ou na
-  // outra sem critério nenhum — e o produto não dava sinal de que escolheu.
-  //
-  // `accepted_at` primeiro porque a organização mais ANTIGA é a que a pessoa
-  // reconhece como "a minha"; `organization_id` como desempate, para o resultado
-  // ser determinístico mesmo quando as duas entraram no mesmo instante (é o caso
-  // de quem foi convidado para várias no mesmo lote).
-  const { data: rawMemberships, error: membErro } = await supabase
-    .from("user_organizations")
-    .select(
-      "organization_id, role, interface_settings, accepted_at, organizations(display_name, locale)",
-    )
-    .eq("user_id", user.id)
-    .is("revoked_at", null)
-    .order("accepted_at", { ascending: true, nullsFirst: true })
-    .order("organization_id", { ascending: true });
-
-  /**
-   * FALHA ALTO, não baixo.
-   *
-   * Antes, o erro destas duas queries era descartado e `rawMemberships` nulo virava
-   * `[]` — ou seja, "usuário sem organização". O resultado é que uma instabilidade do
-   * banco chega ao operador como **"você não pertence a nenhuma organização"**: as
-   * telas de admin somem, as rotas devolvem 403, e nada indica que a causa é
-   * infraestrutura.
-   *
-   * Medido em 2026-07-30: com o PostgREST devolvendo `name resolution failed` depois
-   * de um restart do Docker, TODOS os cards de admin sumiram do hub de configurações.
-   * Custou seis diagnósticos errados — build velho, processo velho, cache, filtro de
-   * papel — antes de alguém olhar a causa real.
-   *
-   * Degradar permissão em silêncio é o pior desfecho possível num caminho de auth:
-   * parece uma decisão de autorização e é um defeito de infra. Melhor estourar e
-   * mostrar erro do que renderizar uma UI mentirosa.
-   */
-  if (paErro || membErro) {
-    const detalhe = (paErro ?? membErro)!;
-    logger.error("[auth] não foi possível resolver permissões do usuário", {
+  const { data: rawContext, error: contextError } = await supabase.rpc("fn_auth_context");
+  if (contextError) {
+    logger.error("[auth] não foi possível resolver o contexto de autorização", {
       user_id: user.id,
-      onde: paErro ? "platform_admins" : "user_organizations",
-      code: detalhe.code,
-      message: detalhe.message,
+      code: contextError.code,
+      message: contextError.message,
     });
-    throw new Error(
-      `auth_permissions_unavailable: ${detalhe.message} — permissões não puderam ser ` +
-        `resolvidas; a sessão NÃO foi rebaixada por decisão de autorização.`,
-    );
+    throw new Error(`auth_context_unavailable: ${contextError.message}`);
+  }
+  const mapped = mapearContextoDeAuth(rawContext, user);
+  if (!mapped) {
+    logger.error("[auth] contexto de autorização ausente ou inválido", { user_id: user.id });
+    return null;
   }
 
-  const rows = (rawMemberships ?? []) as RawMembershipRow[];
-  const memberships: UserOrgMembership[] = rows.map((row) => {
-    const orgs = row.organizations;
-    const org = Array.isArray(orgs) ? (orgs[0] ?? null) : orgs;
-    return {
-      organization_id: row.organization_id,
-      organization_name: org?.display_name ?? "—",
-      role: row.role as Role,
-      interface_settings: lerInterface(row.interface_settings).settings,
-      locale: org?.locale ?? null,
-    };
-  });
-
   const support = await readSupportContext(supabase);
-  const fullName = (user.user_metadata?.full_name as string | undefined) ?? null;
-  const avatarUrl = (user.user_metadata?.avatar_url as string | undefined) ?? null;
-  const locale = (user.user_metadata?.locale as string | undefined) ?? null;
+  const { locale, organizations: memberships } = mapped;
   // A cadeia inteira num lugar só: pessoa → organização ativa → padrão. Quem
   // consome pede `idioma` e não precisa saber que existe uma ordem.
   //
@@ -245,20 +234,7 @@ export async function loadAuthUser(): Promise<AuthUser | null> {
   const idioma = normalizarIdioma(
     locale ?? support?.locale ?? (await localeDaOrgAtiva(memberships)),
   );
-  const timezone = (user.user_metadata?.timezone as string | undefined) ?? null;
-
-  return {
-    id: user.id,
-    email: user.email ?? "",
-    full_name: fullName,
-    avatar_url: avatarUrl,
-    is_platform_admin: !!paRow,
-    locale,
-    idioma,
-    timezone,
-    organizations: memberships,
-    support,
-  };
+  return { ...mapped, idioma, support };
 }
 
 /**
@@ -330,27 +306,32 @@ export async function requiresMfa(
   userId?: string,
   orgId?: string,
 ): Promise<boolean> {
-  const admin = createAdminClient();
-
   let plataformaExige: boolean | null = null;
-  if (isPlatformAdmin && userId) {
-    const { data } = await admin
-      .from("platform_admins")
-      .select("mfa_required")
-      .eq("user_id", userId)
-      .is("revoked_at", null)
-      .maybeSingle();
-    plataformaExige = (data?.mfa_required as boolean | undefined) ?? null;
-  }
-
   let empresaExige = false;
-  if (orgId) {
-    const { data } = await admin
-      .from("organizations")
-      .select("settings")
-      .eq("id", orgId)
-      .maybeSingle();
-    empresaExige = empresaExigeMfa(data?.settings);
+
+  // Canonical CRM does not store these optional legacy MFA policy columns. Its
+  // resolved auth context is authoritative for identity; absent optional policy
+  // retains the product default of not requiring enrollment.
+  if (!isCanonicalCrmUrl(env.NEXT_PUBLIC_SUPABASE_URL)) {
+    const admin = createAdminClient();
+    if (isPlatformAdmin && userId) {
+      const { data } = await admin
+        .from("platform_admins")
+        .select("mfa_required")
+        .eq("user_id", userId)
+        .is("revoked_at", null)
+        .maybeSingle();
+      plataformaExige = (data?.mfa_required as boolean | undefined) ?? null;
+    }
+
+    if (orgId) {
+      const { data } = await admin
+        .from("organizations")
+        .select("settings")
+        .eq("id", orgId)
+        .maybeSingle();
+      empresaExige = empresaExigeMfa(data?.settings);
+    }
   }
 
   return exigeCadastroDeMfa({ role, isPlatformAdmin, plataformaExige, empresaExige });

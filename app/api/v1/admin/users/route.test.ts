@@ -41,20 +41,21 @@ function authUser(id: string, n: number): AuthUserStub {
   };
 }
 
-function uoRow(userId: string) {
+function membershipRow(userId: string) {
   return {
     user_id: userId,
     organization_id: ORG_ID,
-    role: "agent",
-    accepted_at: "2026-01-01T00:00:00Z",
-    revoked_at: null,
-    organizations: { display_name: "Org", slug: "org" },
+    status: "active",
+    joined_at: "2026-01-01T00:00:00Z",
+    deleted_at: null,
+    member_roles: [{ roles: { code: "agent", deleted_at: null } }],
+    organizations: { name: "Org", slug: "org", deleted_at: null },
   };
 }
 
 interface Cfg {
-  uoRows?: unknown[];
-  uoError?: { message: string } | null;
+  membershipRows?: unknown[];
+  membershipError?: { message: string } | null;
   /** Páginas devolvidas por listUsers, na ordem. Página ausente = vazia. */
   authPages?: AuthUserStub[][];
   listError?: { message: string; status?: number; code?: string } | null;
@@ -87,12 +88,13 @@ function makeAdminStub(cfg: Cfg) {
     select: () => builder,
     order: () => builder,
     eq: () => builder,
+    is: () => builder,
     then(
       resolve: (v: { data: unknown[] | null; error: unknown }) => unknown,
     ) {
       return Promise.resolve({
-        data: cfg.uoError ? null : (cfg.uoRows ?? []),
-        error: cfg.uoError ?? null,
+        data: cfg.membershipError ? null : (cfg.membershipRows ?? []),
+        error: cfg.membershipError ?? null,
       }).then(resolve);
     },
   };
@@ -100,7 +102,7 @@ function makeAdminStub(cfg: Cfg) {
   return {
     stub: {
       from: (table: string) => {
-        if (table !== "user_organizations") {
+        if (table !== "organization_members") {
           throw new Error(`unexpected table ${table}`);
         }
         return builder;
@@ -127,7 +129,7 @@ beforeEach(() => {
 describe("GET /api/v1/admin/users — envelope", () => {
   it("devolve { data: [...] } sem aninhar o envelope dentro de si mesmo", async () => {
     const u = authUser("aaaaaaaa-0000-4000-8000-000000000001", 1);
-    const { stub } = makeAdminStub({ uoRows: [uoRow(u.id)], authPages: [[u]] });
+    const { stub } = makeAdminStub({ membershipRows: [membershipRow(u.id)], authPages: [[u]] });
     vi.mocked(createAdminClient).mockReturnValue(stub as never);
 
     const { GET } = await import("./route");
@@ -157,7 +159,7 @@ describe("GET /api/v1/admin/users — custo no GoTrue", () => {
       ),
     );
     const { stub, listUsers, getUserById } = makeAdminStub({
-      uoRows: users.map((u) => uoRow(u.id)),
+      membershipRows: users.map((u) => membershipRow(u.id)),
       authPages: [users],
     });
     vi.mocked(createAdminClient).mockReturnValue(stub as never);
@@ -180,7 +182,7 @@ describe("GET /api/v1/admin/users — custo no GoTrue", () => {
     const u1 = authUser("aaaaaaaa-0000-4000-8000-000000000001", 1);
     const u2 = authUser("aaaaaaaa-0000-4000-8000-000000000002", 2);
     const { stub, listUsers } = makeAdminStub({
-      uoRows: [uoRow(u1.id), uoRow(u2.id)],
+      membershipRows: [membershipRow(u1.id), membershipRow(u2.id)],
       authPages: [[u1], [u2]],
     });
     vi.mocked(createAdminClient).mockReturnValue(stub as never);
@@ -215,7 +217,7 @@ describe("GET /api/v1/admin/users — teto de páginas da varredura", () => {
   it("id necessário na ÚLTIMA página permitida devolve a lista, não 503", async () => {
     const alvo = authUser("aaaaaaaa-0000-4000-8000-000000000001", 1);
     const { stub, listUsers } = makeAdminStub({
-      uoRows: [uoRow(alvo.id)],
+      membershipRows: [membershipRow(alvo.id)],
       authPages: diretorioNoTeto(alvo),
     });
     vi.mocked(createAdminClient).mockReturnValue(stub as never);
@@ -234,7 +236,7 @@ describe("GET /api/v1/admin/users — teto de páginas da varredura", () => {
   it("id ainda pendente depois do teto continua falhando alto", async () => {
     const orfao = "aaaaaaaa-0000-4000-8000-000000000009";
     const { stub, listUsers } = makeAdminStub({
-      uoRows: [uoRow(orfao)],
+      membershipRows: [membershipRow(orfao)],
       authPages: diretorioNoTeto(),
     });
     vi.mocked(createAdminClient).mockReturnValue(stub as never);
@@ -263,7 +265,7 @@ describe("GET /api/v1/admin/users — teto de páginas da varredura", () => {
     const orfao = "aaaaaaaa-0000-4000-8000-000000000009";
     const vivo = authUser("aaaaaaaa-0000-4000-8000-000000000001", 1);
     const { stub } = makeAdminStub({
-      uoRows: [uoRow(vivo.id), uoRow(orfao)],
+      membershipRows: [membershipRow(vivo.id), membershipRow(orfao)],
       authPages: diretorioNoTeto(vivo),
     });
     vi.mocked(createAdminClient).mockReturnValue(stub as never);
@@ -286,7 +288,7 @@ describe("GET /api/v1/admin/users — GoTrue indisponível", () => {
   it("falha alto em vez de devolver lista curta", async () => {
     const u = authUser("aaaaaaaa-0000-4000-8000-000000000001", 1);
     const { stub } = makeAdminStub({
-      uoRows: [uoRow(u.id)],
+      membershipRows: [membershipRow(u.id)],
       authPages: [[u]],
       // AuthRetryableFetchError: o SDK devolve isto SEM lançar em 504/socket.
       listError: { message: "Failed to fetch", status: 504 },
@@ -306,7 +308,7 @@ describe("GET /api/v1/admin/users — GoTrue indisponível", () => {
     const vivo = authUser("aaaaaaaa-0000-4000-8000-000000000001", 1);
     const removido = "aaaaaaaa-0000-4000-8000-000000000009";
     const { stub } = makeAdminStub({
-      uoRows: [uoRow(vivo.id), uoRow(removido)],
+      membershipRows: [membershipRow(vivo.id), membershipRow(removido)],
       authPages: [[vivo]],
     });
     vi.mocked(createAdminClient).mockReturnValue(stub as never);

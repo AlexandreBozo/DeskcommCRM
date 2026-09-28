@@ -55,7 +55,7 @@ export async function signInWithPassword(input: LoginInput, next?: string): Prom
     (await authRateLimited("login", null, AUTH_LIMITS.login)) ||
     (await contaBloqueadaPorFalhas(parsed.data.email, AUTH_LIMITS.login))
   ) {
-    await audit({
+  void audit({
       action: "auth.login_rate_limited",
       metadata: { email_hash: hashEmail(parsed.data.email) },
       requestId,
@@ -73,7 +73,7 @@ export async function signInWithPassword(input: LoginInput, next?: string): Prom
   if (error || !data.user) {
     // Só senha errada gasta o orçamento da conta.
     await registrarFalhaDeLogin(parsed.data.email, AUTH_LIMITS.login);
-    await audit({
+  void audit({
       action: "auth.login_failed",
       metadata: {
         email_hash: hashEmail(parsed.data.email),
@@ -94,7 +94,7 @@ export async function signInWithPassword(input: LoginInput, next?: string): Prom
     return { ok: false, error: "mfa_required", challengeId: verifiedTotp.id };
   }
 
-  await audit({
+  void audit({
     action: "auth.login_success",
     actorUserId: data.user.id,
     metadata: {},

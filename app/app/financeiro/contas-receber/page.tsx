@@ -1,0 +1,5 @@
+import { requireAuth } from "@/lib/auth/server";
+import { contasReceber } from "@/lib/financeiro/mock";
+import { ContasClient } from "../_components/ContasClient";
+export const dynamic = "force-dynamic";
+export default async function ContasReceberPage() { await requireAuth(); return <div className="flex h-full flex-col gap-6 p-6"><header><h1 className="text-2xl font-semibold tracking-tight">Contas a receber</h1><p className="text-sm text-muted-foreground">Receitas previstas, vencimentos e recebimentos.</p></header><ContasClient filtros={["Todos", "Previsto", "Pendente", "Atrasado", "Pago", "Cancelado"]} placeholder="Buscar cliente, descrição ou contrato" colunas={[{ chave: "cliente", label: "Cliente" }, { chave: "descricao", label: "Descrição" }, { chave: "contrato", label: "Contrato / origem" }, { chave: "competencia", label: "Competência" }, { chave: "vencimento", label: "Vencimento" }, { chave: "valor", label: "Valor" }, { chave: "status", label: "Status" }]} linhas={contasReceber} /><p className="text-xs text-muted-foreground">Dados demonstrativos. Nenhum lançamento está conectado ao banco nesta etapa.</p></div>; }

@@ -31,12 +31,14 @@ export const PORTAS_ESSENCIAIS = [
   "/app/settings/profile",
   "/app/settings/security",
   "/app/team",
+  "/admin/tenants",
 ] as const;
 export function essencial(d: NavMetadata, role: Role | null, platform = false): boolean {
   return (
     d.href === PORTAS_ESSENCIAIS[0] ||
     d.href === PORTAS_ESSENCIAIS[1] ||
-    (d.href === PORTAS_ESSENCIAIS[2] && (platform || role === "admin"))
+    (d.href === PORTAS_ESSENCIAIS[2] && (platform || role === "admin")) ||
+    (d.href === PORTAS_ESSENCIAIS[3] && platform)
   );
 }
 export function canSee(

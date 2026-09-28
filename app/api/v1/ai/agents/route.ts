@@ -28,7 +28,7 @@ import { traduzir } from "@/lib/i18n/dicionario";
 export const dynamic = "force-dynamic";
 
 const AGENT_COLUMNS =
-  "id, organization_id, name, description, model, system_prompt, is_active, is_default, kind, priority, published_version_id, paused_at, operation_mode, operation_revision, archived_at, config, guardrails, active_kb_version_id, created_at, updated_at";
+  "id, organization_id, area_id, name, description, model, system_prompt, is_active, is_default, kind, priority, published_version_id, paused_at, operation_mode, operation_revision, archived_at, config, guardrails, active_kb_version_id, created_at, updated_at";
 
 /**
  * As mesmas colunas MAIS o join da versão publicada — só para a LISTAGEM.
@@ -123,6 +123,7 @@ export async function POST(req: NextRequest): Promise<Response> {
       .from("ai_agents")
       .insert({
         organization_id: activeOrg.orgId,
+       area_id: input.area_id ?? null,
         name: input.name,
         description: input.description ?? null,
         model: `${v.provider}/${v.model}`,
@@ -229,6 +230,7 @@ export async function POST(req: NextRequest): Promise<Response> {
     .from("ai_agents")
     .insert({
       organization_id: activeOrg.orgId,
+       area_id: input.area_id ?? null,
       name: input.name,
       description: input.description ?? null,
       model: input.model ?? "anthropic/claude-sonnet-5",

@@ -137,7 +137,7 @@ const schema = z.object({
   SUPABASE_DB_ADMIN_URL: z.string().optional().default(""),
 
   // WAHA
-  WAHA_API_BASE_URL: required("WAHA_API_BASE_URL"),
+  WAHA_API_BASE_URL: z.string().optional(),
   WAHA_API_KEY: required("WAHA_API_KEY"),
   WAHA_WEBHOOK_BASE_URL: required("WAHA_WEBHOOK_BASE_URL"),
   // Segredo com que o WAHA assina os webhooks. O compose já o entrega ao
@@ -152,8 +152,8 @@ const schema = z.object({
   WAHA_WEBHOOK_REQUIRE_SIGNATURE: z.string().optional().default("false"),
 
   // Upstash Redis
-  UPSTASH_REDIS_REST_URL: required("UPSTASH_REDIS_REST_URL"),
-  UPSTASH_REDIS_REST_TOKEN: required("UPSTASH_REDIS_REST_TOKEN"),
+  UPSTASH_REDIS_REST_URL: z.string().optional(),
+  UPSTASH_REDIS_REST_TOKEN: z.string().optional(),
 
   // AI providers — env-gated. Worker no-ops with skip="ai_gateway_key_missing"
   // when AI_GATEWAY_API_KEY is absent, so production boot must not be fatal.
@@ -292,6 +292,11 @@ const schema = z.object({
   // app inteiro no dia em que alguém escrever `TRUE`.
   GOOGLE_CALENDAR_CLIENT_ID: z.string().optional().default(""),
   GOOGLE_CALENDAR_CLIENT_SECRET: z.string().optional().default(""),
+
+  // Google Ads — OAuth do aplicativo + developer token da instalação.
+  GOOGLE_ADS_CLIENT_ID: z.string().optional().default(""),
+  GOOGLE_ADS_CLIENT_SECRET: z.string().optional().default(""),
+  GOOGLE_ADS_DEVELOPER_TOKEN: z.string().optional().default(""),
 
   // Nuvemshop — opcional (template genérico open-source). Só exigidas quando
   // NUVEMSHOP_ENABLED=true; o runtime já degrada via getConfig()==null.

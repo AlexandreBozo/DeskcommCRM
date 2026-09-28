@@ -1,0 +1,27 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false
+  },
+  "include": [
+    "next-env.d.ts",
+    "lib/plataformas-de-anuncio/google/**/*.ts",
+    "app/api/v1/ads/google/**/*.ts",
+    "app/app/ads/google/**/*.tsx",
+    "app/app/settings/google-ads/**/*.tsx",
+    "hooks/ads/useGoogleAds.ts",
+    "lib/env.ts",
+    "lib/audit/actions.ts",
+    "lib/auth/public-paths.ts",
+    "lib/navigation/catalogo.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    ".next",
+    "dist",
+    "scripts/**",
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "tests/**"
+  ]
+}

@@ -52,14 +52,14 @@ export async function acceptInviteAction(token: string): Promise<AcceptInviteRes
   }
 
   // Org/papel/convidador vêm exclusivamente do token assinado; usuário do JWT.
-  const { data: result, error } = await createAdminClient().rpc("fn_accept_team_invite", {
-    p_interface_settings: payload.interface_settings ?? { preset: "completa" },
+  // O CRM canônico chama o papel administrativo de `org_admin`; a UI preserva
+  // `admin` como vocabulário de produto.
+  const { data: result, error } = await createAdminClient().rpc("fn_accept_organization_invite", {
     p_user: user.id,
     p_org: payload.organization_id,
-    p_role: payload.role,
+    p_role: payload.role === "admin" ? "org_admin" : payload.role,
     p_invited_by: payload.invited_by ?? null,
-    p_issued_at: payload.iat ? new Date(payload.iat * 1000).toISOString() : null,
-    p_invited_at: new Date((payload.iat ?? payload.exp - 86400) * 1000).toISOString(),
+    p_issued_at: new Date((payload.iat ?? payload.exp - 86400) * 1000).toISOString(),
   });
   if (error)
     return { ok: false, error: error.code === "42501" ? "invalid_or_expired" : "internal_error" };

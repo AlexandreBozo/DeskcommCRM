@@ -24,7 +24,7 @@ import {
 export const dynamic = "force-dynamic";
 
 const AGENT_COLUMNS =
-  "id, organization_id, name, description, model, system_prompt, is_active, is_default, kind, priority, published_version_id, paused_at, operation_mode, operation_revision, archived_at, config, guardrails, active_kb_version_id, created_at, updated_at";
+  "id, organization_id, name, description, model, system_prompt, is_active, is_default, kind, priority, published_version_id, paused_at, operation_mode, operation_revision, archived_at, config, guardrails, active_kb_version_id, area_id, created_at, updated_at";
 
 type RouteCtx = { params: Promise<{ id: string }> };
 
@@ -177,6 +177,7 @@ export async function PATCH(req: NextRequest, ctx: RouteCtx): Promise<Response> 
   if (patch.model !== undefined) update.model = patch.model;
   if (patch.system_prompt !== undefined) update.system_prompt = patch.system_prompt;
   if (patch.guardrails !== undefined) update.guardrails = patch.guardrails;
+  if (patch.area_id !== undefined) update.area_id = patch.area_id;
 
   if (priorityPatch !== null) update.priority = priorityPatch;
 

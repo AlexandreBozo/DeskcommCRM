@@ -12,6 +12,7 @@ import { marcaDaInstalacao } from "@/lib/branding/instalacao";
 import { resolverMarcaDaOrganizacao } from "@/lib/branding/organizacao";
 import { env } from "@/lib/env";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { isCanonicalCrmUrl } from "@/lib/supabase/canonical-crm";
 import {
   ImpersonateBanner,
 } from "@/components/app/ImpersonateBanner";
@@ -39,16 +40,21 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   // EPIC-11: gate /app/* on org not being suspended (S-11.08).
   if (activeOrg) {
     const admin = createAdminClient();
-    const { data: orgRow } = await admin
+    const canonicalCrm = isCanonicalCrmUrl(env.NEXT_PUBLIC_SUPABASE_URL);
+    const { data: rawOrgRow } = await admin
       .from("organizations")
-      .select("onboarded_at, status, settings")
+      .select(canonicalCrm ? "status" : "onboarded_at, status, settings")
       .eq("id", activeOrg.orgId)
       .maybeSingle();
-    if (orgRow && !orgRow.onboarded_at && !user.support) redirect("/onboarding");
+    const orgRow = rawOrgRow as {
+      onboarded_at?: string | null; settings?: unknown; status?: string | null;
+    } | null;
+    const organizationSettings = canonicalCrm ? null : orgRow?.settings;
+    if (!canonicalCrm && orgRow && !orgRow.onboarded_at && !user.support) redirect("/onboarding");
     if (orgRow?.status === "suspended") redirect("/account-suspended");
     // G4-02: expõe visibility_mode ao client (inbox decide visões visíveis).
     // Fonte confiável (admin client, org do cookie validado) — nunca do body.
-    const mode = (orgRow?.settings as { visibility_mode?: VisibilityMode } | null)
+    const mode = (organizationSettings as { visibility_mode?: VisibilityMode } | null)
       ?.visibility_mode;
     activeOrg = { ...activeOrg, visibility_mode: mode ?? DEFAULT_VISIBILITY_MODE };
 
@@ -57,7 +63,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     // `resolve.ts` — a marca custa uma consulta a cada 30s e um lookup de Map
     // por render, não uma derivação de rampa por requisição.
     const marca = resolverMarcaDaOrganizacao(
-      orgRow?.settings ?? null,
+      organizationSettings ?? null,
       await marcaDaInstalacao(),
       env,
     );

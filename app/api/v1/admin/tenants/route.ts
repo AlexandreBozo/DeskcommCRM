@@ -1,18 +1,13 @@
-import { requireSupportWrite } from "@/lib/impersonate/support";
-import { createTenantSchema } from "@/lib/schemas/tenant-creation";
-import { issueInvite } from "@/lib/auth/issue-invite";
-import { mfaEmDivida } from "@/lib/auth/server";
 import { type NextRequest } from "next/server";
 import { z } from "zod";
+import { createHash, randomUUID } from "node:crypto";
+import { createTenantSchema } from "@/lib/schemas/tenant-creation";
+import { issueInvite } from "@/lib/auth/issue-invite";
 import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { type CanonicalFrom } from "@/lib/supabase/canonical-query";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
-import { createHash, randomUUID } from "node:crypto";
-
-// ---------------------------------------------------------------------------
-// Schemas
-// ---------------------------------------------------------------------------
 
 const querySchema = z.object({
   q: z.string().optional(),
@@ -20,10 +15,6 @@ const querySchema = z.object({
   cursor: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(100).default(30),
 });
-
-// ---------------------------------------------------------------------------
-// Cursor helpers
-// ---------------------------------------------------------------------------
 
 interface CursorPayload {
   created_at: string;
@@ -42,13 +33,19 @@ function decodeCursor(cursor: string): CursorPayload | null {
   }
 }
 
-// ---------------------------------------------------------------------------
-// GET /api/v1/admin/tenants
-// ---------------------------------------------------------------------------
+type OrganizationRow = {
+  id: string;
+  name: string;
+  slug: string;
+  status: string;
+  primary_domain: string | null;
+  subdomain: string | null;
+  metadata: unknown;
+  created_at: string;
+};
 
 export async function GET(req: NextRequest) {
   const requestId = randomUUID();
-
   let adminCtx: Awaited<ReturnType<typeof requirePlatformAdmin>>;
   try {
     adminCtx = await requirePlatformAdmin();
@@ -66,67 +63,58 @@ export async function GET(req: NextRequest) {
 
   const { q, status, cursor, limit } = parsed.data;
   const admin = createAdminClient();
+  const canonicalFrom = admin.from.bind(admin) as unknown as CanonicalFrom;
   const cursorPayload = cursor ? decodeCursor(cursor) : null;
-
-  let query = admin
-    .from("organizations")
-    .select(
-      `
-      id,
-      slug,
-      display_name,
-      legal_name,
-      cnpj,
-      status,
-      onboarded_at,
-      suspended_at,
-      created_at,
-      user_count:user_organizations(count),
-      conversations_count:conversations(count)
-    `,
-    )
+  let query = canonicalFrom("organizations")
+    .select("id, name, slug, status, primary_domain, subdomain, metadata, created_at")
+    .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .order("id", { ascending: false })
     .limit(limit + 1);
 
-  if (status === "onboarding") {
-    // Estado derivado: ativo no banco, onboarding ainda não concluído.
-    query = query.eq("status", "active").is("onboarded_at", null);
-  } else if (status) {
-    query = query.eq("status", status);
-  }
-
-  if (q) {
-    query = query.or(`display_name.ilike.%${q}%,slug::text.ilike.%${q}%,cnpj.ilike.%${q}%`);
-  }
-
+  if (status) query = query.eq("status", status);
+  if (q) query = query.or(`name.ilike.%${q}%,slug.ilike.%${q}%`);
   if (cursorPayload) {
-    query = query.or(
-      `created_at.lt.${cursorPayload.created_at},and(created_at.eq.${cursorPayload.created_at},id.lt.${cursorPayload.id})`,
-    );
+    query = query.or(`created_at.lt.${cursorPayload.created_at},and(created_at.eq.${cursorPayload.created_at},id.lt.${cursorPayload.id})`);
   }
 
   const { data, error } = await query;
+  if (error) return fail("internal_error", "Query failed", 500, { requestId, details: error.message });
 
-  if (error) {
-    return fail("internal_error", "Query failed", 500, {
+  const rows = (data ?? []) as unknown as OrganizationRow[];
+  const has_more = rows.length > limit;
+  const page = has_more ? rows.slice(0, limit) : rows;
+  const lastRow = page.at(-1);
+  const nextCursor = has_more && lastRow ? encodeCursor({ created_at: lastRow.created_at, id: lastRow.id }) : null;
+  const organizationIds = page.map((organization) => organization.id);
+  const { data: memberships, error: membershipsError } = organizationIds.length
+    ? await canonicalFrom("organization_members")
+        .select("organization_id")
+        .in("organization_id", organizationIds)
+        .eq("status", "active")
+        .is("deleted_at", null)
+    : { data: [], error: null };
+
+  if (membershipsError) {
+    return fail("internal_error", "Membership query failed", 500, {
       requestId,
-      details: error.message,
+      details: membershipsError.message,
     });
   }
 
-  const rows = data ?? [];
-  const has_more = rows.length > limit;
-  const page = has_more ? rows.slice(0, limit) : rows;
-
-  const lastRow = page.at(-1);
-  const nextCursor =
-    has_more && lastRow
-      ? encodeCursor({
-          created_at: (lastRow as { created_at: string }).created_at,
-          id: lastRow.id,
-        })
-      : null;
+  const membershipCounts = new Map<string, number>();
+  for (const membership of memberships ?? []) {
+    membershipCounts.set(
+      membership.organization_id,
+      (membershipCounts.get(membership.organization_id) ?? 0) + 1,
+    );
+  }
+  const tenants = page.map(({ name, ...organization }) => ({
+    ...organization,
+    name,
+    display_name: name,
+    user_count: membershipCounts.get(organization.id) ?? 0,
+  }));
 
   void audit({
     action: "platform_admin.tenants_listed",
@@ -134,120 +122,41 @@ export async function GET(req: NextRequest) {
     actingAsPlatformAdmin: true,
     bypassedRls: true,
     requestId,
-    metadata: {
-      filters: { status: status ?? null, has_q: !!q },
-      result_count: page.length,
-    },
+    metadata: { filters: { status: status ?? null, has_q: !!q }, result_count: tenants.length },
   });
-
-  return ok(page, {
-    requestId,
-    meta: { has_more, cursor: nextCursor },
-  });
+  return ok(tenants, { requestId, meta: { has_more, cursor: nextCursor } });
 }
 
-// ---------------------------------------------------------------------------
-// POST /api/v1/admin/tenants
-// ---------------------------------------------------------------------------
-
 export async function POST(req: NextRequest) {
-  const supportDenied = await requireSupportWrite();
-  if (supportDenied) return supportDenied;
-
   const requestId = randomUUID();
-
   let adminCtx: Awaited<ReturnType<typeof requirePlatformAdmin>>;
   try {
     adminCtx = await requirePlatformAdmin();
   } catch {
     return fail("forbidden", "Platform admin required", 403, { requestId });
   }
-
-  if (adminCtx.platformAdmin.scope !== "full") {
-    return fail("forbidden", "Seu acesso de suporte não permite criar organizações", 403, {
-      requestId,
-    });
-  }
-  if (await mfaEmDivida())
-    return fail("mfa_required", "Confirme a verificação em duas etapas", 403, { requestId });
-  const key = req.headers.get("Idempotency-Key") ?? randomUUID();
-  if (!z.string().uuid().safeParse(key).success) {
-    return fail("validation_error", "Idempotency-Key deve ser UUID", 400, { requestId });
-  }
-
-  let body: unknown;
-  try {
-    body = await req.json();
-  } catch {
-    return fail("validation_error", "Invalid JSON body", 400, { requestId });
-  }
-
-  const parsed = createTenantSchema.safeParse(body);
-  if (!parsed.success) {
-    return fail("validation_error", "Invalid request body", 400, {
-      requestId,
-      details: parsed.error.flatten(),
-    });
-  }
-
+  let rawInput: unknown;
+  try { rawInput = await req.json(); } catch { return fail("validation_error", "Invalid JSON body", 400, { requestId }); }
+  const parsed = createTenantSchema.safeParse(rawInput);
+  if (!parsed.success) return fail("validation_error", "Invalid tenant data", 400, { requestId, details: parsed.error.flatten() });
+  const rawKey = req.headers.get("idempotency-key");
+  const idempotencyKey = rawKey && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(rawKey) ? rawKey : null;
+  if (!idempotencyKey) return fail("validation_error", "Idempotency-Key UUID is required", 400, { requestId });
+  const input = parsed.data;
+  const canonicalRequest = { name: input.display_name, slug: input.slug, metadata: { plan: input.plan, legal_name: input.legal_name || null, cnpj: input.cnpj || null } };
+  const requestHash = createHash("sha256").update(JSON.stringify(canonicalRequest)).digest("hex");
   const admin = createAdminClient();
-  const request = { ...parsed.data, owner_email: parsed.data.owner_email.trim().toLowerCase() };
-  const { data: org, error } = await admin.rpc("fn_create_tenant_with_owner", {
-    p_actor: adminCtx.user.id,
-    p_key: key,
-    p_request: request,
-    p_hash: createHash("sha256").update(JSON.stringify(request)).digest("hex"),
-  });
-  if (error) {
-    if (error.code === "23505" || error.code === "22023") {
-      return fail("conflict", "Slug já existe ou a chave foi usada com outros dados", 409, {
-        requestId,
-      });
-    }
-    return fail("internal_error", "Não foi possível criar a organização", 500, { requestId });
+  const { data: provisioned, error: provisionError } = await admin.rpc("fn_provision_tenant", { p_actor: adminCtx.user.id, p_key: idempotencyKey, p_request: canonicalRequest, p_hash: requestHash });
+  if (provisionError || !provisioned || typeof provisioned !== "object") {
+    const code = provisionError?.code === "23505" ? "conflict" : "internal_error";
+    return fail(code, provisionError?.message ?? "Tenant provisioning failed", code === "conflict" ? 409 : 500, { requestId });
   }
-  if (org.created) {
-    await audit({
-      action: "tenant.created_by_platform_admin",
-      actorUserId: adminCtx.user.id,
-      actingAsPlatformAdmin: true,
-      bypassedRls: true,
-      organizationId: org.id,
-      resourceType: "organization",
-      resourceId: org.id,
-      requestId,
-      metadata: {
-        slug: org.slug,
-        display_name: org.display_name,
-        plan: request.plan,
-        creator_role: "admin",
-      },
-    });
-  }
-  const ownerInvitation =
-    request.owner_email === adminCtx.user.email?.trim().toLowerCase()
-      ? null
-      : await issueInvite({
-          email: request.owner_email,
-          role: "admin",
-          interfaceSettings: request.owner_interface_settings,
-          organizationId: org.id,
-          orgName: org.display_name,
-          inviterId: adminCtx.user.id,
-          inviterName:
-            adminCtx.user.user_metadata?.full_name ?? adminCtx.user.email ?? "Administrador",
-          requestId,
-          inviteId: org.invite_id,
-          issuedAt: org.issued_at,
-          dispatch: org.created,
-        });
-  return ok(
-    {
-      id: org.id,
-      slug: org.slug,
-      display_name: org.display_name,
-      owner_invitation: ownerInvitation,
-    },
-    { status: 201, requestId },
-  );
+  const tenant = provisioned as { id: string; name: string; slug: string; created: boolean };
+  const { data: verifiedOrg, error: verifyOrgError } = await admin.from("organizations").select("id, name, slug, status").eq("id", tenant.id).is("deleted_at", null).maybeSingle();
+  const { data: verifiedMembership, error: verifyMembershipError } = await admin.from("organization_members").select("id").eq("organization_id", tenant.id).eq("user_id", adminCtx.user.id).eq("status", "active").is("deleted_at", null).maybeSingle();
+  if (verifyOrgError || verifyMembershipError || !verifiedOrg || !verifiedMembership) return fail("internal_error", "Tenant provisioning verification failed", 500, { requestId });
+  let ownerInvitation = null;
+  if (input.owner_email.trim().toLowerCase() !== adminCtx.user.email.trim().toLowerCase()) ownerInvitation = await issueInvite({ email: input.owner_email, role: "admin", interfaceSettings: input.owner_interface_settings, organizationId: tenant.id, orgName: tenant.name, inviterId: adminCtx.user.id, inviterName: adminCtx.user.full_name ?? adminCtx.user.email, requestId, dispatch: tenant.created });
+  void audit({ action: "tenant.created_by_platform_admin", actorUserId: adminCtx.user.id, actingAsPlatformAdmin: true, bypassedRls: true, organizationId: tenant.id, resourceType: "organization", resourceId: tenant.id, requestId, metadata: { slug: tenant.slug, created: tenant.created } });
+  return ok({ id: tenant.id, slug: tenant.slug, display_name: tenant.name, owner_invitation: ownerInvitation }, { status: tenant.created ? 201 : 200, requestId });
 }

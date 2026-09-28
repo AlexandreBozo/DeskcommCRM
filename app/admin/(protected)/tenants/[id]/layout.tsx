@@ -64,7 +64,7 @@ export default async function TenantDetailLayout({
   // Auth check — outer (protected)/layout.tsx already guards, but we need
   // org data server-side for the header. requirePlatformAdmin is cheap (cached).
   const { user } = await requirePlatformAdmin();
-  const idioma = normalizarIdioma((user.user_metadata?.locale as string | undefined) ?? null);
+  const idioma = normalizarIdioma(user.locale ?? null);
 
   const { id } = await params;
   const admin = createAdminClient();

@@ -73,12 +73,12 @@ async function gravarCadastroDoAgente(
     orgId: string;
     actorUserId: string;
     requestId: string;
-    atual: { name?: unknown; description?: unknown; priority?: unknown };
-    pedido: { name?: string; description?: string | null; priority?: number };
+    atual: { name?: unknown; description?: unknown; priority?: unknown; area_id?: unknown };
+    pedido: { name?: string; description?: string | null; priority?: number; area_id?: string | null };
   },
 ): Promise<{ erro: string } | { mudou: string[] }> {
   const patch: Record<string, unknown> = {};
-  for (const campo of ["name", "description", "priority"] as const) {
+  for (const campo of ["name", "description", "priority", "area_id"] as const) {
     const novo = args.pedido[campo];
     if (novo === undefined) continue;
     if ((args.atual[campo] ?? null) === (novo ?? null)) continue;
@@ -152,12 +152,26 @@ export async function saveAgentDraftAction(
   // Sanity: o agent existe e é da org? não está arquivado?
   const { data: agent } = await admin
     .from("ai_agents")
-    .select("id, kind, archived_at, name, description, priority, published_version_id")
+    .select("id, kind, archived_at, name, description, priority, area_id, published_version_id")
     .eq("id", agentId)
     .eq("organization_id", activeOrg.orgId)
     .maybeSingle();
   if (!agent) return { ok: false, error: "not_found" };
   if (agent.archived_at) return { ok: false, error: "agent_archived" };
+
+  // Área é cadastro do agente, não conteúdo versionado. Service role bypassa RLS,
+  // então a associação precisa ser validada explicitamente contra o tenant ativo.
+  const requestedAreaId = cadastroParsed?.success ? cadastroParsed.data.area_id : undefined;
+  if (requestedAreaId !== undefined && requestedAreaId !== null && requestedAreaId !== agent.area_id) {
+    const { data: area } = await admin
+      .from("coagentica_areas")
+      .select("id")
+      .eq("id", requestedAreaId)
+      .eq("organization_id", activeOrg.orgId)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (!area) return { ok: false, error: "validation_failed", message: "Área inválida ou inativa para esta organização." };
+  }
 
   // O escopo aponta para coisas que EXISTEM nesta organização. Marcar um
   // material apagado (ou de outra organização) produz uma configuração muda: a
@@ -671,11 +685,23 @@ export async function createMcpAgentAction(
   const requestId = randomUUID();
   const admin = createAdminClient();
 
+  if (parsed.data.area_id) {
+    const { data: area } = await admin
+      .from("coagentica_areas")
+      .select("id")
+      .eq("id", parsed.data.area_id)
+      .eq("organization_id", activeOrg.orgId)
+      .eq("is_active", true)
+      .maybeSingle();
+    if (!area) return { ok: false, error: "validation_failed", message: "Área inválida ou inativa para esta organização." };
+  }
+
   // Cria agent kind='mcp_agent' + v1 draft. Compensa rollback se versão falhar.
   const { data: agentRow, error: agentErr } = await admin
     .from("ai_agents")
     .insert({
       organization_id: activeOrg.orgId,
+      area_id: parsed.data.area_id ?? null,
       name: parsed.data.name,
       description: parsed.data.description ?? null,
       model: parsed.data.version.model,

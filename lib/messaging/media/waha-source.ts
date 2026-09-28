@@ -22,6 +22,8 @@ export async function fetchWahaMedia(
   hintMime?: string | null,
 ): Promise<FetchedMedia> {
   const base = process.env.WAHA_API_BASE_URL;
+  if (!base) throw new Error("waha_capability_unavailable");
+
   let url: URL;
   try {
     const advertised = new URL(mediaUrl);

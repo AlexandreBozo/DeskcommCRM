@@ -1,6 +1,7 @@
 import { type NextRequest } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { type CanonicalFrom } from "@/lib/supabase/canonical-query";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { randomUUID } from "node:crypto";
@@ -24,6 +25,7 @@ export async function GET(
   }
 
   const admin = createAdminClient();
+  const canonicalFrom = admin.from.bind(admin) as unknown as CanonicalFrom;
 
   // Load auth user via admin auth API
   const { data: authUserData, error: authError } =
@@ -35,20 +37,23 @@ export async function GET(
 
   const authUser = authUserData.user;
 
-  // Load memberships (user_organizations + organizations join)
-  const { data: memberships, error: membershipError } = await admin
-    .from("user_organizations")
+  // Load canonical memberships, roles, and organizations.
+  const { data: memberships, error: membershipError } = await canonicalFrom("organization_members")
     .select(
       `
       organization_id,
-      role,
-      accepted_at,
-      revoked_at,
-      organizations(display_name, slug)
+      status,
+      joined_at,
+      deleted_at,
+      member_roles(roles(code, deleted_at)),
+      organizations!inner(name, slug, deleted_at)
     `,
     )
     .eq("user_id", id)
-    .order("accepted_at", { ascending: false });
+    .eq("status", "active")
+    .is("deleted_at", null)
+    .is("organizations.deleted_at", null)
+    .order("joined_at", { ascending: false });
 
   if (membershipError) {
     return fail("internal_error", "Membership query failed", 500, {
@@ -59,20 +64,31 @@ export async function GET(
 
   type RawMembership = {
     organization_id: string;
-    role: string;
-    accepted_at: string | null;
-    revoked_at: string | null;
-    organizations: { display_name: string; slug: string } | null;
+    joined_at: string | null;
+    deleted_at: string | null;
+    member_roles: Array<{ roles: { code: string; deleted_at: string | null } | null }> | null;
+    organizations: { name: string; slug: string; deleted_at: string | null } | null;
+  };
+
+  const normalizeRole = (membership: RawMembership): "admin" | "manager" | "agent" | "viewer" => {
+    const codes = (membership.member_roles ?? [])
+      .map((memberRole) => memberRole.roles)
+      .filter((memberRole): memberRole is { code: string; deleted_at: string | null } => memberRole !== null && memberRole.deleted_at === null)
+      .map((memberRole) => memberRole.code);
+    if (codes.some((code) => code === "org_admin" || code === "admin")) return "admin";
+    if (codes.includes("manager")) return "manager";
+    if (codes.includes("agent")) return "agent";
+    return "viewer";
   };
 
   const formattedMemberships = ((memberships ?? []) as unknown as RawMembership[]).map(
-    (m) => ({
-      organization_id: m.organization_id,
-      tenant_name: m.organizations?.display_name ?? null,
-      tenant_slug: m.organizations?.slug ?? null,
-      role: m.role,
-      accepted_at: m.accepted_at,
-      revoked_at: m.revoked_at,
+    (membership) => ({
+      organization_id: membership.organization_id,
+      tenant_name: membership.organizations?.name ?? null,
+      tenant_slug: membership.organizations?.slug ?? null,
+      role: normalizeRole(membership),
+      accepted_at: membership.joined_at,
+      revoked_at: membership.deleted_at,
     }),
   );
 

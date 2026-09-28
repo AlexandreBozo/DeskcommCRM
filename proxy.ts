@@ -112,7 +112,8 @@ export async function proxy(request: NextRequest) {
   // check is server-side in `requirePlatformAdmin`). Skip the RPC for
   // `/admin/forbidden` (rendered to non-admins, would otherwise loop).
   if (isAdminSurface && pathname.startsWith("/admin") && pathname !== "/admin/forbidden") {
-    const { data: isAdmin, error } = await supabase.rpc("fn_is_platform_admin");
+    const { data: authContext, error } = await supabase.rpc("fn_auth_context");
+    const isAdmin = Boolean(authContext && typeof authContext === "object" && "is_platform_admin" in authContext && authContext.is_platform_admin);
     if (error || !isAdmin) {
       return NextResponse.redirect(new URL("/admin/forbidden", request.url));
     }

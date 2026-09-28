@@ -5,7 +5,6 @@ import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 
 import { createAdminClient } from "@/lib/supabase/admin";
-import { createClient } from "@/lib/supabase/server";
 import { audit } from "@/lib/audit";
 import { tenantSchema, type TenantInput } from "@/lib/schemas/settings";
 import { loadAuthUser, resolveActiveOrg } from "@/lib/auth/server";
@@ -58,33 +57,32 @@ export async function updateTenant(input: TenantInput): Promise<UpdateTenantResu
   // Read current settings jsonb to merge `lost_reasons_extra` non-destructively.
   const { data: orgRow, error: readErr } = await supabase
     .from("organizations")
-    .select("settings")
+    .select("metadata")
     .eq("id", activeOrg.orgId)
     .maybeSingle();
   if (readErr) return { ok: false, error: readErr.message };
 
-  const currentSettings = (orgRow?.settings as Record<string, unknown> | null) ?? {};
-  const nextSettings = {
-    ...currentSettings,
+  const currentMetadata = (orgRow?.metadata as Record<string, unknown> | null) ?? {};
+  const nextMetadata = {
+    ...currentMetadata,
+    legal_name: parsed.data.legal_name,
+    cnpj: parsed.data.cnpj ?? null,
+    timezone: parsed.data.timezone,
+    locale: parsed.data.locale,
+    currency: parsed.data.currency,
+    media_retention_days: parsed.data.media_retention_days,
+    dpo_email: parsed.data.dpo_email ?? null,
+    privacy_policy_url: parsed.data.privacy_policy_url ?? null,
     lost_reasons_extra: parsed.data.lost_reasons_extra,
   };
 
-  const { error } = await supabase
+  const { data: updated, error } = await supabase
     .from("organizations")
-    .update({
-      display_name: parsed.data.display_name,
-      legal_name: parsed.data.legal_name,
-      cnpj: parsed.data.cnpj ?? null,
-      timezone: parsed.data.timezone,
-      locale: parsed.data.locale,
-      currency: parsed.data.currency,
-      media_retention_days: parsed.data.media_retention_days,
-      dpo_email: parsed.data.dpo_email ?? null,
-      privacy_policy_url: parsed.data.privacy_policy_url ?? null,
-      settings: nextSettings,
-    })
-    .eq("id", activeOrg.orgId);
-  if (error) return { ok: false, error: error.message };
+    .update({ name: parsed.data.display_name, metadata: nextMetadata, updated_by: authUser.id })
+    .eq("id", activeOrg.orgId)
+    .select("id")
+    .maybeSingle();
+  if (error || !updated) return { ok: false, error: error?.message ?? "organization_not_found" };
 
   await audit({
     action: "org.updated",

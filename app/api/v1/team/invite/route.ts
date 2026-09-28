@@ -70,10 +70,11 @@ export async function POST(req: NextRequest): Promise<Response> {
   const memberEmails = new Set<string>();
   if (admin) {
     const { data: members } = await admin
-      .from("user_organizations")
+      .from("organization_members")
       .select("user_id")
       .eq("organization_id", activeOrg.orgId)
-      .is("revoked_at", null);
+      .eq("status", "active")
+      .is("deleted_at", null);
     for (const m of members ?? []) {
       const { data: u } = await admin.auth.admin.getUserById(m.user_id as string);
       const memberEmail = u?.user?.email?.trim().toLowerCase();

@@ -77,6 +77,7 @@ interface CandidateRow {
   organization_id: string;
   published_version_id: string | null;
   version: VersionRow | null;
+  area_id: string | null;
 }
 
 interface VersionRow {
@@ -379,7 +380,7 @@ async function loadCandidates(
   const { data, error } = await admin
     .from("ai_agents")
     .select(
-      "id, organization_id, priority, created_at, archived_at, published_version_id, version:ai_agent_versions!ai_agents_published_version_id_fkey(id, organization_id, status, channel_session_id, trigger_config)",
+      "id, organization_id, area_id, priority, created_at, archived_at, published_version_id, version:ai_agent_versions!ai_agents_published_version_id_fkey(id, organization_id, status, channel_session_id, trigger_config)",
     )
     .eq("organization_id", orgId)
     .is("archived_at", null)

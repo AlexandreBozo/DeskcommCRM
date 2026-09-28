@@ -26,14 +26,9 @@ const GRANTER_ID = "33333333-3333-4333-8333-333333333333";
 function paRow(userId: string, grantedBy: string | null) {
   return {
     user_id: userId,
-    granted_by: grantedBy,
-    granted_at: "2026-01-01T00:00:00Z",
-    scope: "full",
-    mfa_required: true,
-    reason: "fundador",
+    created_by: grantedBy,
+    created_at: "2026-01-01T00:00:00Z",
     revoked_at: null,
-    revoked_by: null,
-    revoke_reason: null,
   };
 }
 

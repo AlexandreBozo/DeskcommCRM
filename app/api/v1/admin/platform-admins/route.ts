@@ -1,6 +1,7 @@
 import { type NextRequest } from "next/server";
 import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { type CanonicalFrom } from "@/lib/supabase/canonical-query";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { randomUUID } from "node:crypto";
@@ -28,6 +29,7 @@ export async function GET(_req: NextRequest) {
   }
 
   const admin = createAdminClient();
+  const canonicalFrom = admin.from.bind(admin) as unknown as CanonicalFrom;
 
   // Step 1: fetch all platform_admins rows.
   //
@@ -36,12 +38,11 @@ export async function GET(_req: NextRequest) {
   // PostgREST responder 42703 "column platform_admins.id does not exist" → 400,
   // e a rota devolvia 500 em toda requisição. Era o PRIMEIRO erro da rota: ela
   // abortava aqui e nunca chegava na resolução de emails.
-  const { data: paRows, error: paError } = await admin
-    .from("platform_admins")
+  const { data: paRows, error: paError } = await canonicalFrom("platform_admins")
     .select(
-      "user_id, granted_by, granted_at, scope, mfa_required, reason, revoked_at, revoked_by, revoke_reason",
+      "user_id, created_by, created_at, revoked_at",
     )
-    .order("granted_at", { ascending: false });
+    .order("created_at", { ascending: false });
 
   if (paError) {
     return fail("internal_error", "Query failed", 500, {
@@ -62,12 +63,11 @@ export async function GET(_req: NextRequest) {
     return ok([], { requestId });
   }
 
-  // Step 2: collect all user IDs that need resolution (user, granted_by, revoked_by)
+  // Step 2: collect canonical subject and creator IDs for email resolution.
   const userIdSet = new Set<string>();
   for (const row of paRows) {
     userIdSet.add(row.user_id);
-    if (row.granted_by) userIdSet.add(row.granted_by);
-    if (row.revoked_by) userIdSet.add(row.revoked_by);
+    if (row.created_by) userIdSet.add(row.created_by);
   }
   const allUserIds = Array.from(userIdSet);
 
@@ -133,8 +133,7 @@ export async function GET(_req: NextRequest) {
   // Step 4: build enriched rows
   const data = paRows.map((pa) => {
     const targetUser = authMap.get(pa.user_id);
-    const grantedByUser = pa.granted_by ? authMap.get(pa.granted_by) : null;
-    const revokedByUser = pa.revoked_by ? authMap.get(pa.revoked_by) : null;
+    const grantedByUser = pa.created_by ? authMap.get(pa.created_by) : null;
 
     return {
       // O front usa `id` como key do React. Como a PK da tabela é `user_id` e
@@ -145,16 +144,17 @@ export async function GET(_req: NextRequest) {
       user_name:
         (targetUser?.raw_user_meta_data?.full_name as string | undefined) ??
         null,
-      granted_by: pa.granted_by,
+      granted_by: pa.created_by,
       granted_by_email: grantedByUser?.email ?? null,
-      granted_at: pa.granted_at,
-      scope: pa.scope,
-      mfa_required: pa.mfa_required,
-      reason: pa.reason,
+      granted_at: pa.created_at,
+      // No canonical equivalents exist for these compatibility fields.
+      scope: null,
+      mfa_required: false,
+      reason: null,
       revoked_at: pa.revoked_at,
-      revoked_by: pa.revoked_by,
-      revoked_by_email: revokedByUser?.email ?? null,
-      revoke_reason: pa.revoke_reason,
+      revoked_by: null,
+      revoked_by_email: null,
+      revoke_reason: null,
     };
   });
 

@@ -87,6 +87,7 @@ interface BaseProps {
   channelSessions: ChannelSessionLite[];
   routerMembership?: { routerId: string; routerName: string } | null;
   readOnly?: boolean;
+  areas?: { id: string; name: string }[];
 }
 
 interface EditProps extends BaseProps {
@@ -134,6 +135,7 @@ type Props = (EditProps | CreateProps) & {
 interface FormState {
   name: string;
   description: string;
+  area_id: string | null;
   priority: number;
   provider: Provider;
   model: string;
@@ -188,6 +190,7 @@ function buildState(args: {
   return {
     name: agent?.name ?? "",
     description: agent?.description ?? "",
+    area_id: agent?.area_id ?? null,
     priority: agent?.priority ?? 0,
     provider: (version?.provider as Provider) ?? "anthropic",
     model: version?.model ?? "",
@@ -244,6 +247,7 @@ function toCadastroPayload(s: FormState) {
     // "não mexi", e a descrição antiga sobreviveria a um campo esvaziado.
     description: s.description.trim() === "" ? null : s.description.trim(),
     priority: s.priority,
+    area_id: s.area_id ?? null,
   };
 }
 
@@ -430,6 +434,7 @@ export function AgentForm(props: Props) {
           name: form.name,
           description: form.description.trim() === "" ? undefined : form.description,
           priority: form.priority,
+          area_id: form.area_id ?? null,
           version: toVersionPayload(form),
         };
         const validated = agentMcpCreateSchema.safeParse(payload);
@@ -686,6 +691,35 @@ export function AgentForm(props: Props) {
                   "Quando mais de um agente puder atender a mesma conversa, o de número maior tenta primeiro. Se você só tem um agente, pode deixar como está.",
                 )}
               </p>
+            </div>
+          </Card>
+
+          {/* Area */}
+          <Card className="space-y-3 p-4">
+            <h3 className="text-sm font-medium">{t("Área de atuação")}</h3>
+            <div className="space-y-1">
+              <Label htmlFor="area_id">{t("Área")}</Label>
+              <Select
+                value={form.area_id ?? undefined}
+                onValueChange={(v) => patch({ area_id: v ?? null })}
+                disabled={disabled}
+              >
+                <SelectTrigger id="area_id">
+                  <SelectValue placeholder={t("Selecione uma área")} />
+                </SelectTrigger>
+                <SelectContent>
+                  {props.areas?.map((area) => (
+                    <SelectItem key={area.id} value={area.id}>
+                      {area.name}
+                    </SelectItem>
+                  ))}
+                  {!(props.areas?.length ?? 0) ? (
+                    <SelectItem value="__none__" disabled>
+                      {t("Nenhuma área disponível")}
+                    </SelectItem>
+                  ) : null}
+                </SelectContent>
+              </Select>
             </div>
           </Card>
 

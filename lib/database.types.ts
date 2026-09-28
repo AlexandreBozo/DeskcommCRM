@@ -900,12 +900,14 @@ export type Database = {
           model: string
           name: string
           organization_id: string
+          area_id: string | null
           priority: number
           published_version_id: string | null
           system_prompt: string
           updated_at: string
         }
         Insert: {
+          area_id?: string | null
           operation_mode?: string
           paused_at?: string | null
           operation_revision?: number
@@ -946,6 +948,7 @@ export type Database = {
           model?: string
           name?: string
           organization_id?: string
+          area_id?: string | null
           priority?: number
           published_version_id?: string | null
           system_prompt?: string

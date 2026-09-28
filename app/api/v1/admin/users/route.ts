@@ -2,6 +2,7 @@ import { type NextRequest } from "next/server";
 import { z } from "zod";
 import { requirePlatformAdmin } from "@/lib/auth/requirePlatformAdmin";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { type CanonicalFrom } from "@/lib/supabase/canonical-query";
 import { ok, fail } from "@/lib/api/wrappers";
 import { audit } from "@/lib/audit";
 import { randomUUID } from "node:crypto";
@@ -68,6 +69,7 @@ export async function GET(req: NextRequest) {
 
   const { tenant_id, role, q, cursor, limit } = parsed.data;
   const admin = createAdminClient();
+  const canonicalFrom = admin.from.bind(admin) as unknown as CanonicalFrom;
   const cursorPayload = cursor ? decodeCursor(cursor) : null;
 
   // O join com `auth.users` acontece em memória, não no Postgres: `auth` não é
@@ -76,50 +78,53 @@ export async function GET(req: NextRequest) {
   // PGRST106 "Invalid schema: auth" mesmo com service role. O vínculo vem do
   // PostgREST; email, nome e último login vêm do GoTrue (Auth Admin API).
 
-  // Step 1: query user_organizations + organizations
-  type UoRow = {
+  // Step 1: query active canonical memberships, roles, and organizations.
+  type MembershipRole = { roles: { code: string; deleted_at: string | null } | null };
+  type MembershipRow = {
     user_id: string;
     organization_id: string;
-    role: string;
-    accepted_at: string | null;
-    revoked_at: string | null;
-    organizations: {
-      display_name: string;
-      slug: string;
-    } | null;
+    status: string;
+    joined_at: string | null;
+    deleted_at: string | null;
+    member_roles: MembershipRole[] | null;
+    organizations: { name: string; slug: string; deleted_at: string | null } | null;
   };
 
-  let uoQuery = admin
-    .from("user_organizations")
+  let membershipQuery = canonicalFrom("organization_members")
     .select(
-      `
-      user_id,
-      organization_id,
-      role,
-      accepted_at,
-      revoked_at,
-      organizations!inner(display_name, slug)
-    `,
+      "user_id, organization_id, status, joined_at, deleted_at, member_roles(roles(code, deleted_at)), organizations!inner(name, slug, deleted_at)",
     )
+    .eq("status", "active")
+    .is("deleted_at", null)
+    .is("organizations.deleted_at", null)
     .order("user_id", { ascending: false });
 
-  if (tenant_id) {
-    uoQuery = uoQuery.eq("organization_id", tenant_id);
-  }
-  if (role) {
-    uoQuery = uoQuery.eq("role", role);
-  }
+  if (tenant_id) membershipQuery = membershipQuery.eq("organization_id", tenant_id);
 
-  const { data: uoRows, error: uoError } = await uoQuery;
-
-  if (uoError) {
+  const { data: membershipRows, error: membershipError } = await membershipQuery;
+  if (membershipError) {
     return fail("internal_error", "Query failed", 500, {
       requestId,
-      details: uoError.message,
+      details: membershipError.message,
     });
   }
 
-  if (!uoRows || uoRows.length === 0) {
+  const normalizeRole = (membership: MembershipRow): "admin" | "manager" | "agent" | "viewer" => {
+    const codes = (membership.member_roles ?? [])
+      .map((memberRole) => memberRole.roles)
+      .filter((memberRole): memberRole is { code: string; deleted_at: string | null } => memberRole !== null && memberRole.deleted_at === null)
+      .map((memberRole) => memberRole.code);
+    if (codes.some((code) => code === "org_admin" || code === "admin")) return "admin";
+    if (codes.includes("manager")) return "manager";
+    if (codes.includes("agent")) return "agent";
+    return "viewer";
+  };
+
+  const activeMemberships = ((membershipRows ?? []) as unknown as MembershipRow[])
+    .map((membership) => ({ ...membership, normalized_role: normalizeRole(membership) }))
+    .filter((membership) => !role || membership.normalized_role === role);
+
+  if (activeMemberships.length === 0) {
     void audit({
       action: "platform_admin.users_listed",
       actorUserId: adminCtx.user.id,
@@ -132,7 +137,7 @@ export async function GET(req: NextRequest) {
   }
 
   // Step 2: get unique user IDs
-  const userIds = [...new Set((uoRows as unknown as UoRow[]).map((r) => r.user_id))];
+  const userIds = [...new Set(activeMemberships.map((r) => r.user_id))];
 
   // Step 3: fetch auth users via the Auth Admin API.
   //
@@ -254,22 +259,22 @@ export async function GET(req: NextRequest) {
     created_at: string;
   };
 
-  let joined: JoinedRow[] = (uoRows as unknown as UoRow[]).flatMap((uo) => {
-    const u = authMap.get(uo.user_id);
+  let joined: JoinedRow[] = activeMemberships.flatMap((membership) => {
+    const u = authMap.get(membership.user_id);
     // Chegar aqui sem usuário só é possível depois de o diretório inteiro ter
     // sido varrido com sucesso (erro do GoTrue já abortou lá em cima): é um
     // vínculo apontando para usuário removido do Auth, e some da lista.
     if (!u) return [];
-    const org = uo.organizations;
+    const org = membership.organizations;
     if (!org) return [];
     return [
       {
-        user_id: uo.user_id,
-        organization_id: uo.organization_id,
-        role: uo.role,
-        accepted_at: uo.accepted_at,
-        revoked_at: uo.revoked_at,
-        tenant_name: org.display_name,
+        user_id: membership.user_id,
+        organization_id: membership.organization_id,
+        role: membership.normalized_role,
+        accepted_at: membership.joined_at,
+        revoked_at: membership.deleted_at,
+        tenant_name: org.name,
         tenant_slug: org.slug,
         email: u.email ?? null,
         full_name:

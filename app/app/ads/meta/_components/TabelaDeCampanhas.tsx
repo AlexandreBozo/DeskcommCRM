@@ -1,5 +1,17 @@
 "use client";
 
+import { useEffect, useState } from "react";
+
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Table,
   TableBody,
@@ -59,6 +71,37 @@ const TOM_DO_ESTADO: Record<string, string> = {
 
 const TRACO = "—";
 
+const COLUNAS_CONFIGURAVEIS = [
+  { id: "status", rotulo: "Status" },
+  { id: "veiculacao", rotulo: "Veiculação" },
+  { id: "resultado", rotulo: "Resultado" },
+  { id: "custoResultado", rotulo: "Custo por Resultado" },
+  { id: "gasto", rotulo: "Valor Gasto" },
+  { id: "impressoes", rotulo: "Impressões" },
+  { id: "alcance", rotulo: "Alcance" },
+  { id: "cpm", rotulo: "CPM" },
+  { id: "ctr", rotulo: "CTR" },
+  { id: "frequencia", rotulo: "Frequência" },
+  { id: "cpc", rotulo: "CPC" },
+  { id: "hookRate", rotulo: "Hook Rate" },
+  { id: "thruPlays", rotulo: "ThruPlays" },
+] as const;
+
+type ColunaConfiguravel = (typeof COLUNAS_CONFIGURAVEIS)[number]["id"];
+const TODAS_AS_COLUNAS = COLUNAS_CONFIGURAVEIS.map((coluna) => coluna.id);
+const COLUNAS_ESSENCIAIS: ColunaConfiguravel[] = [
+  "status",
+  "veiculacao",
+  "resultado",
+  "custoResultado",
+  "gasto",
+  "impressoes",
+  "alcance",
+  "ctr",
+  "cpc",
+];
+const CHAVE_COLUNAS = "coagentica.meta-ads.colunas.v1";
+
 function Numero({ valor, casas = 0 }: { valor: number | null; casas?: number }) {
   if (valor === null) return <span className="text-muted-foreground">{TRACO}</span>;
   return (
@@ -99,6 +142,42 @@ interface Props {
 
 export function TabelaDeCampanhas({ linhas, moeda }: Props) {
   const t = useT();
+  const [colunasVisiveis, setColunasVisiveis] = useState<Set<ColunaConfiguravel>>(
+    () => new Set(TODAS_AS_COLUNAS),
+  );
+
+  useEffect(() => {
+    try {
+      const salvo = window.localStorage.getItem(CHAVE_COLUNAS);
+      if (!salvo) return;
+      const ids = JSON.parse(salvo) as string[];
+      const validos = ids.filter((id): id is ColunaConfiguravel =>
+        TODAS_AS_COLUNAS.includes(id as ColunaConfiguravel),
+      );
+      queueMicrotask(() => setColunasVisiveis(new Set(validos)));
+    } catch {
+      // Preferência local inválida não deve impedir a leitura das campanhas.
+    }
+  }, []);
+
+  const aplicarColunas = (ids: ColunaConfiguravel[]) => {
+    const proximo = new Set(ids);
+    setColunasVisiveis(proximo);
+    try {
+      window.localStorage.setItem(CHAVE_COLUNAS, JSON.stringify([...proximo]));
+    } catch {
+      // O seletor continua funcional mesmo quando o navegador bloqueia storage.
+    }
+  };
+
+  const alternarColuna = (id: ColunaConfiguravel, marcada: boolean) => {
+    const proximo = new Set(colunasVisiveis);
+    if (marcada) proximo.add(id);
+    else proximo.delete(id);
+    aplicarColunas([...proximo]);
+  };
+
+  const visivel = (id: ColunaConfiguravel) => colunasVisiveis.has(id);
 
   const dinheiro = (valor: number | null, casas = 2) => {
     if (valor === null) return <span className="text-muted-foreground">{TRACO}</span>;
@@ -116,9 +195,7 @@ export function TabelaDeCampanhas({ linhas, moeda }: Props) {
 
   const estado = (valor: string | null) => {
     if (!valor) return <span className="text-muted-foreground">{TRACO}</span>;
-    return (
-      <span className={TOM_DO_ESTADO[valor] ?? ""}>{t(ESTADO_LEGIVEL[valor] ?? valor)}</span>
-    );
+    return <span className={TOM_DO_ESTADO[valor] ?? ""}>{t(ESTADO_LEGIVEL[valor] ?? valor)}</span>;
   };
 
   if (linhas.length === 0) {
@@ -138,98 +215,160 @@ export function TabelaDeCampanhas({ linhas, moeda }: Props) {
   }
 
   return (
-    /*
-      O scroll horizontal mora AQUI, num contêiner próprio — nunca no `<body>`.
-      São 14 colunas; em telas estreitas a tabela rola dentro do próprio quadro e
-      a página segue parada, que é o combinado do produto para conteúdo largo.
-    */
-    <div className="overflow-x-auto rounded-md border">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead className="sticky left-0 z-10 bg-bg">{t("Campanha")}</TableHead>
-            <TableHead>{t("Status")}</TableHead>
-            <TableHead>{t("Veiculação")}</TableHead>
-            <TableHead className="text-right">{t("Resultado")}</TableHead>
-            <TableHead className="text-right">{t("Custo por Resultado")}</TableHead>
-            <TableHead className="text-right">{t("Valor Gasto")}</TableHead>
-            <TableHead className="text-right">{t("Impressões")}</TableHead>
-            <TableHead className="text-right">{t("Alcance")}</TableHead>
-            <TableHead className="text-right">{t("CPM")}</TableHead>
-            <TableHead className="text-right">{t("CTR")}</TableHead>
-            <TableHead className="text-right">{t("Frequência")}</TableHead>
-            <TableHead className="text-right">{t("CPC")}</TableHead>
-            {/*
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-xs text-muted-foreground">
+          {t("Campanha")} + {colunasVisiveis.size} {t("colunas visíveis")}
+        </p>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button type="button" variant="outline" size="sm">
+              {t("Colunas")}
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-64">
+            <DropdownMenuLabel>{t("Colunas da tabela")}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            <DropdownMenuCheckboxItem checked disabled>
+              {t("Campanha")}
+            </DropdownMenuCheckboxItem>
+            {COLUNAS_CONFIGURAVEIS.map((coluna) => (
+              <DropdownMenuCheckboxItem
+                key={coluna.id}
+                checked={visivel(coluna.id)}
+                onCheckedChange={(marcada) => alternarColuna(coluna.id, marcada === true)}
+                onSelect={(event) => event.preventDefault()}
+              >
+                {t(coluna.rotulo)}
+              </DropdownMenuCheckboxItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onSelect={() => aplicarColunas(COLUNAS_ESSENCIAIS)}>
+              {t("Mostrar essenciais")}
+            </DropdownMenuItem>
+            <DropdownMenuItem onSelect={() => aplicarColunas([...TODAS_AS_COLUNAS])}>
+              {t("Mostrar todas")}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      </div>
+
+      <div className="overflow-x-auto rounded-md border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead className="sticky left-0 z-10 bg-bg">{t("Campanha")}</TableHead>
+              {visivel("status") && <TableHead>{t("Status")}</TableHead>}
+              {visivel("veiculacao") && <TableHead>{t("Veiculação")}</TableHead>}
+              {visivel("resultado") && (
+                <TableHead className="text-right">{t("Resultado")}</TableHead>
+              )}
+              {visivel("custoResultado") && (
+                <TableHead className="text-right">{t("Custo por Resultado")}</TableHead>
+              )}
+              {visivel("gasto") && <TableHead className="text-right">{t("Valor Gasto")}</TableHead>}
+              {visivel("impressoes") && (
+                <TableHead className="text-right">{t("Impressões")}</TableHead>
+              )}
+              {visivel("alcance") && <TableHead className="text-right">{t("Alcance")}</TableHead>}
+              {visivel("cpm") && <TableHead className="text-right">{t("CPM")}</TableHead>}
+              {visivel("ctr") && <TableHead className="text-right">{t("CTR")}</TableHead>}
+              {visivel("frequencia") && (
+                <TableHead className="text-right">{t("Frequência")}</TableHead>
+              )}
+              {visivel("cpc") && <TableHead className="text-right">{t("CPC")}</TableHead>}
+              {/*
               O rótulo diz o numerador de propósito. O Hook Rate de mercado usa
               reproduções de 3 segundos, e esse campo FOI REMOVIDO da v22.0 —
               sobrou o total de reproduções, que dá um número maior. Uma coluna
               "Hook Rate" pelada não bateria com o Gerenciador e não explicaria
               por quê; com o numerador escrito, bate a conta na hora.
             */}
-            <TableHead className="text-right" title={t("Reproduções de vídeo ÷ impressões")}>
-              {t("Hook Rate")}
-              <span className="ml-1 font-normal text-muted-foreground">
-                {t("(reproduções)")}
-              </span>
-            </TableHead>
-            <TableHead className="text-right">{t("ThruPlays")}</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {linhas.map((linha) => {
-            const rotulo = rotuloDoIndicador(linha.resultado.indicador);
-            return (
-              <TableRow key={linha.campanhaId}>
-                <TableCell className="sticky left-0 z-10 max-w-[22rem] bg-bg font-medium">
-                  <span className="block truncate" title={linha.nome}>
-                    {linha.nome}
+              {visivel("hookRate") && (
+                <TableHead className="text-right" title={t("Reproduções de vídeo ÷ impressões")}>
+                  {t("Hook Rate")}
+                  <span className="ml-1 font-normal text-muted-foreground">
+                    {t("(reproduções)")}
                   </span>
-                </TableCell>
-                <TableCell>{estado(linha.status)}</TableCell>
-                <TableCell>{estado(linha.veiculacao)}</TableCell>
-                <TableCell className="text-right">
-                  <Numero valor={linha.resultado.valor} />
-                  {/*
-                    O rótulo do indicador viaja com o número. "15" sozinho não
-                    diz se são conversas, cadastros ou compras — e a tabela
-                    mistura objetivos, então a mesma coluna significa coisas
-                    diferentes em linhas vizinhas.
-                  */}
-                  {rotulo && (
-                    <span className="block text-xs font-normal text-muted-foreground">
-                      {t(rotulo)}
+                </TableHead>
+              )}
+              {visivel("thruPlays") && (
+                <TableHead className="text-right">{t("ThruPlays")}</TableHead>
+              )}
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {linhas.map((linha) => {
+              const rotulo = rotuloDoIndicador(linha.resultado.indicador);
+              return (
+                <TableRow key={linha.campanhaId}>
+                  <TableCell className="sticky left-0 z-10 max-w-[22rem] bg-bg font-medium">
+                    <span className="block truncate" title={linha.nome}>
+                      {linha.nome}
                     </span>
+                  </TableCell>
+                  {visivel("status") && <TableCell>{estado(linha.status)}</TableCell>}
+                  {visivel("veiculacao") && <TableCell>{estado(linha.veiculacao)}</TableCell>}
+                  {visivel("resultado") && (
+                    <TableCell className="text-right">
+                      <Numero valor={linha.resultado.valor} />
+                      {rotulo && (
+                        <span className="block text-xs font-normal text-muted-foreground">
+                          {t(rotulo)}
+                        </span>
+                      )}
+                    </TableCell>
                   )}
-                </TableCell>
-                <TableCell className="text-right">
-                  {dinheiro(linha.resultado.custoPorResultado)}
-                </TableCell>
-                <TableCell className="text-right">{dinheiro(linha.gasto)}</TableCell>
-                <TableCell className="text-right">
-                  <Numero valor={linha.impressoes} />
-                </TableCell>
-                <TableCell className="text-right">
-                  <Numero valor={linha.alcance} />
-                </TableCell>
-                <TableCell className="text-right">{dinheiro(linha.cpm)}</TableCell>
-                <TableCell className="text-right">
-                  <Percentual valor={linha.ctr} />
-                </TableCell>
-                <TableCell className="text-right">
-                  <Numero valor={linha.frequencia} casas={2} />
-                </TableCell>
-                <TableCell className="text-right">{dinheiro(linha.cpc)}</TableCell>
-                <TableCell className="text-right">
-                  <Percentual valor={linha.hookRate} />
-                </TableCell>
-                <TableCell className="text-right">
-                  <Numero valor={linha.thruPlays} />
-                </TableCell>
-              </TableRow>
-            );
-          })}
-        </TableBody>
-      </Table>
+                  {visivel("custoResultado") && (
+                    <TableCell className="text-right">
+                      {dinheiro(linha.resultado.custoPorResultado)}
+                    </TableCell>
+                  )}
+                  {visivel("gasto") && (
+                    <TableCell className="text-right">{dinheiro(linha.gasto)}</TableCell>
+                  )}
+                  {visivel("impressoes") && (
+                    <TableCell className="text-right">
+                      <Numero valor={linha.impressoes} />
+                    </TableCell>
+                  )}
+                  {visivel("alcance") && (
+                    <TableCell className="text-right">
+                      <Numero valor={linha.alcance} />
+                    </TableCell>
+                  )}
+                  {visivel("cpm") && (
+                    <TableCell className="text-right">{dinheiro(linha.cpm)}</TableCell>
+                  )}
+                  {visivel("ctr") && (
+                    <TableCell className="text-right">
+                      <Percentual valor={linha.ctr} />
+                    </TableCell>
+                  )}
+                  {visivel("frequencia") && (
+                    <TableCell className="text-right">
+                      <Numero valor={linha.frequencia} casas={2} />
+                    </TableCell>
+                  )}
+                  {visivel("cpc") && (
+                    <TableCell className="text-right">{dinheiro(linha.cpc)}</TableCell>
+                  )}
+                  {visivel("hookRate") && (
+                    <TableCell className="text-right">
+                      <Percentual valor={linha.hookRate} />
+                    </TableCell>
+                  )}
+                  {visivel("thruPlays") && (
+                    <TableCell className="text-right">
+                      <Numero valor={linha.thruPlays} />
+                    </TableCell>
+                  )}
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </div>
     </div>
   );
 }

@@ -11,16 +11,13 @@ import { TenantForm } from "./_form";
 export const dynamic = "force-dynamic";
 
 interface OrgRow {
-  display_name: string;
-  legal_name: string;
-  cnpj: string | null;
-  timezone: string;
-  locale: string;
-  currency: string;
-  media_retention_days: number;
-  dpo_email: string | null;
-  privacy_policy_url: string | null;
-  settings: Record<string, unknown> | null;
+  name: string;
+  metadata: Record<string, unknown> | null;
+}
+
+function stringMetadata(metadata: Record<string, unknown>, key: string, fallback = ""): string {
+  const value = metadata[key];
+  return typeof value === "string" ? value : fallback;
 }
 
 export default async function TenantSettingsPage() {
@@ -35,16 +32,16 @@ export default async function TenantSettingsPage() {
   const { data } = await supabase
     .from("organizations")
     .select(
-      "display_name, legal_name, cnpj, timezone, locale, currency, media_retention_days, dpo_email, privacy_policy_url, settings",
+      "name, metadata",
     )
     .eq("id", activeOrg.orgId)
     .maybeSingle();
 
   const row = (data ?? null) as OrgRow | null;
-  const lostReasonsExtra =
-    (row?.settings && Array.isArray((row.settings as { lost_reasons_extra?: unknown }).lost_reasons_extra)
-      ? ((row.settings as { lost_reasons_extra?: string[] }).lost_reasons_extra ?? [])
-      : []) as string[];
+  const metadata = row?.metadata ?? {};
+  const lostReasonsExtra = Array.isArray(metadata.lost_reasons_extra)
+    ? metadata.lost_reasons_extra.filter((reason): reason is string => typeof reason === "string")
+    : [];
   const idioma = user.idioma;
 
   return (
@@ -58,22 +55,22 @@ export default async function TenantSettingsPage() {
       {row && (
         <TenantForm
           initial={{
-            display_name: row.display_name,
-            legal_name: row.legal_name,
-            cnpj: row.cnpj,
-            timezone: row.timezone,
+            display_name: row.name,
+            legal_name: stringMetadata(metadata, "legal_name", row.name),
+            cnpj: stringMetadata(metadata, "cnpj") || null,
+            timezone: stringMetadata(metadata, "timezone", "America/Sao_Paulo"),
             // `en-US` saiu da lista (nunca teve tradução). Uma linha antiga
             // com ele cai no padrão em vez de quebrar a tela.
-            locale: row.locale === "es" ? "es" : "pt-BR",
-            currency: moedaServidaOu(row.currency),
-            media_retention_days: row.media_retention_days,
-            dpo_email: row.dpo_email,
-            privacy_policy_url: row.privacy_policy_url,
+            locale: stringMetadata(metadata, "locale") === "es" ? "es" : "pt-BR",
+            currency: moedaServidaOu(stringMetadata(metadata, "currency", "BRL")),
+            media_retention_days: Number(metadata.media_retention_days) || 365,
+            dpo_email: stringMetadata(metadata, "dpo_email") || null,
+            privacy_policy_url: stringMetadata(metadata, "privacy_policy_url") || null,
             lost_reasons_extra: lostReasonsExtra,
           }}
         />
       )}
-      {row && <ZonaDePerigoDaOrganizacao displayName={row.display_name} />}
+      {row && <ZonaDePerigoDaOrganizacao displayName={row.name} />}
     </div>
   );
 }

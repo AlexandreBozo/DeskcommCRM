@@ -1,97 +1,19 @@
 "use client";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { SuspendDialog } from "./SuspendDialog";
 import { ReactivateDialog } from "./ReactivateDialog";
 import { ImpersonateButton } from "@/components/admin/ImpersonateButton";
+import { apiClient } from "@/lib/api/client";
 import { useT } from "@/hooks/i18n/useT";
-
-// ---------------------------------------------------------------------------
-// Props
-// ---------------------------------------------------------------------------
-
-interface TenantActionsProps {
-  organizationId: string;
-  status: "active" | "suspended" | "redacted";
-  displayName: string;
-}
-
-// ---------------------------------------------------------------------------
-// Component
-// ---------------------------------------------------------------------------
-
-export function TenantActions({
-  organizationId,
-  status,
-  displayName,
-}: TenantActionsProps) {
-  const t = useT();
-  const [suspendOpen, setSuspendOpen] = useState(false);
-  const [reactivateOpen, setReactivateOpen] = useState(false);
-
-  const canSuspend = status === "active";
-  const isSuspended = status === "suspended";
-  const isRedacted = status === "redacted";
-
-  return (
-    <>
-      <div className="rounded-lg border bg-card p-5 space-y-4">
-        <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
-          {t("Ações")}
-        </h2>
-
-        {/* Impersonate (S-11.07) */}
-        <ImpersonateButton
-          organizationId={organizationId}
-          displayName={displayName}
-          disabled={isRedacted}
-          disabledReason={
-            isRedacted ? t("Tenant redigido — ação não disponível") : undefined
-          }
-        />
-
-        {/* Suspend */}
-        {canSuspend && (
-          <Button
-            className="w-full"
-            variant="destructive"
-            onClick={() => setSuspendOpen(true)}
-            aria-label={t("Suspender tenant")}
-          >
-            {t("Suspender tenant")}
-          </Button>
-        )}
-
-        {/* Reactivate */}
-        {isSuspended && (
-          <Button
-            className="w-full"
-            variant="outline"
-            onClick={() => setReactivateOpen(true)}
-            aria-label={t("Reativar tenant")}
-          >
-            {t("Reativar tenant")}
-          </Button>
-        )}
-
-        {isRedacted && (
-          <p className="text-xs text-muted-foreground text-center py-2">
-            {t("Tenant redigido — ações de gestão não disponíveis.")}
-          </p>
-        )}
-      </div>
-
-      <SuspendDialog
-        open={suspendOpen}
-        onClose={() => setSuspendOpen(false)}
-        organizationId={organizationId}
-      />
-
-      <ReactivateDialog
-        open={reactivateOpen}
-        onClose={() => setReactivateOpen(false)}
-        organizationId={organizationId}
-      />
-    </>
-  );
+interface TenantActionsProps { organizationId: string; status: "active" | "suspended" | "redacted" | "trialing"; displayName: string; slug: string; }
+export function TenantActions({ organizationId, status, displayName, slug }: TenantActionsProps) {
+  const t = useT(); const router = useRouter(); const [suspendOpen, setSuspendOpen] = useState(false); const [reactivateOpen, setReactivateOpen] = useState(false); const [editOpen, setEditOpen] = useState(false); const [archiveOpen, setArchiveOpen] = useState(false); const [name, setName] = useState(displayName); const [nextSlug, setNextSlug] = useState(slug); const [confirmName, setConfirmName] = useState(""); const [pending, setPending] = useState(false);
+  async function save() { setPending(true); try { await apiClient.patch(`/api/v1/admin/tenants/${organizationId}`, { name, slug: nextSlug }); setEditOpen(false); router.refresh(); } finally { setPending(false); } }
+  async function archive() { setPending(true); try { await apiClient.delete(`/api/v1/admin/tenants/${organizationId}`, { confirm_name: confirmName }); router.push("/admin/tenants"); router.refresh(); } finally { setPending(false); } }
+  return <><div className="rounded-lg border bg-card p-5 space-y-3"><h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">{t("Ações")}</h2><Button className="w-full" variant="outline" onClick={() => setEditOpen(true)}>{t("Editar tenant")}</Button><ImpersonateButton organizationId={organizationId} displayName={displayName} disabled={status === "redacted"} disabledReason={status === "redacted" ? t("Tenant redigido — ação não disponível") : undefined} />{(status === "active" || status === "trialing") && <Button className="w-full" variant="destructive" onClick={() => setSuspendOpen(true)}>{t("Suspender tenant")}</Button>}{status === "suspended" && <Button className="w-full" variant="outline" onClick={() => setReactivateOpen(true)}>{t("Reativar tenant")}</Button>}<Button className="w-full" variant="destructive" onClick={() => setArchiveOpen(true)}>{t("Excluir tenant")}</Button></div><SuspendDialog open={suspendOpen} onClose={() => setSuspendOpen(false)} organizationId={organizationId} /><ReactivateDialog open={reactivateOpen} onClose={() => setReactivateOpen(false)} organizationId={organizationId} /><Dialog open={editOpen} onOpenChange={setEditOpen}><DialogContent><DialogHeader><DialogTitle>{t("Editar tenant")}</DialogTitle><DialogDescription>{t("Altere o nome e o identificador público da organização.")}</DialogDescription></DialogHeader><div className="space-y-3"><div><Label htmlFor="tenant-name">{t("Nome")}</Label><Input id="tenant-name" value={name} onChange={(event) => setName(event.target.value)} /></div><div><Label htmlFor="tenant-slug">Slug</Label><Input id="tenant-slug" value={nextSlug} onChange={(event) => setNextSlug(event.target.value)} /></div></div><DialogFooter><Button variant="outline" onClick={() => setEditOpen(false)}>{t("Cancelar")}</Button><Button disabled={pending || name.trim().length < 2 || !/^[a-z0-9-]{2,40}$/.test(nextSlug)} onClick={() => void save()}>{pending ? t("Salvando…") : t("Salvar")}</Button></DialogFooter></DialogContent></Dialog><Dialog open={archiveOpen} onOpenChange={setArchiveOpen}><DialogContent><DialogHeader><DialogTitle>{t("Excluir tenant")}</DialogTitle><DialogDescription>{t("O tenant será arquivado e deixará de aparecer na plataforma. Os dados operacionais não são apagados fisicamente.")}</DialogDescription></DialogHeader><div className="space-y-2"><Label htmlFor="archive-name">{t("Digite o nome do tenant para confirmar")}: <strong>{displayName}</strong></Label><Input id="archive-name" value={confirmName} onChange={(event) => setConfirmName(event.target.value)} /></div><DialogFooter><Button variant="outline" onClick={() => setArchiveOpen(false)}>{t("Cancelar")}</Button><Button variant="destructive" disabled={pending || confirmName !== displayName} onClick={() => void archive()}>{pending ? t("Excluindo…") : t("Excluir tenant")}</Button></DialogFooter></DialogContent></Dialog></>;
 }

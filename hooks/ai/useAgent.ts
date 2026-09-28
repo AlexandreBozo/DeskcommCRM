@@ -9,6 +9,7 @@ import type { AgentPatch } from "@/lib/ai/guardrails-schema";
 export interface AgentRow {
   id: string;
   organization_id: string;
+  area_id?: string | null;
   name: string;
   description: string | null;
   model: string;
